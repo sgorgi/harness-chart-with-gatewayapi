@@ -1,0 +1,8 @@
+# harnessGatewayOverlay.enabled controls all resources owned by this overlay.
+harnessGatewayOverlay:
+  enabled: false
+
+  # harnessGatewayOverlay.ciliumNetworkPolicy.enabled adds an additive Cilium
+  # allow rule after the Envoy data-plane namespace and labels are confirmed.
+  ciliumNetworkPolicy:
+    enabled: false

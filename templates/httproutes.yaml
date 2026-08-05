@@ -1,0 +1,111 @@
+{{- if .Values.harnessGatewayOverlay.enabled }}
+{{- $allValues := fromYaml (toYaml .Values) }}
+{{- $harnessHost := required "global.ingress.hosts[0] is required in the existing Harness values" (first (dig "global" "ingress" "hosts" (list) $allValues)) }}
+{{- $classicUiEnabled := dig "global" "cg" "enabled" false $allValues }}
+{{- $nextGenUiEnabled := dig "global" "ng" "enabled" true $allValues }}
+{{- $lookerEnabled := dig "global" "ngcustomdashboard" "enabled" false $allValues }}
+{{- $nextGenUiName := dig "next-gen-ui" "nameOverride" "" $allValues | default "next-gen-ui" | trunc 63 | trimSuffix "-" }}
+{{- $nextGenUiPort := dig "next-gen-ui" "service" "port" 80 $allValues }}
+
+{{/*
+Harness Common renders all generic HTTPRoutes. It does not render the bespoke
+NextGen UI catch-all Ingress, so this overlay owns only that missing route.
+Classic UI is already covered by the native ui-0 HTTPRoute.
+*/}}
+{{- if and $nextGenUiEnabled (not $classicUiEnabled) }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: harness-ui
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "harness-gateway-api.labels" . | nindent 4 }}
+  {{- with (include "harness-gateway-api.annotations" . | fromYaml) }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: ListenerSet
+      name: {{ include "harness-gateway-api.listenerSetName" . }}
+      namespace: {{ .Release.Namespace }}
+      sectionName: {{ include "harness-gateway-api.harnessSectionName" . }}
+  hostnames:
+    - {{ $harnessHost | quote }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: {{ $nextGenUiName }}
+          port: {{ $nextGenUiPort }}
+{{- end }}
+
+{{/* Looker uses a bespoke upstream Ingress and is not handled by Harness Common. */}}
+{{- if $lookerEnabled }}
+{{- $lookerHost := required "looker.ingress.hosts[0] is required when global.ngcustomdashboard.enabled is true" (first (dig "looker" "ingress" "hosts" (list) $allValues)) }}
+{{- $lookerName := dig "looker" "nameOverride" "" $allValues | default "looker" | trunc 63 | trimSuffix "-" }}
+{{- $lookerWebPort := dig "looker" "service" "port" "web" 9999 $allValues }}
+{{- $lookerApiPort := dig "looker" "service" "port" "api" 19999 $allValues }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: looker
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "harness-gateway-api.labels" . | nindent 4 }}
+  {{- with (include "harness-gateway-api.annotations" . | fromYaml) }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: ListenerSet
+      name: {{ include "harness-gateway-api.listenerSetName" . }}
+      namespace: {{ .Release.Namespace }}
+      sectionName: {{ include "harness-gateway-api.lookerSectionName" . }}
+  hostnames:
+    - {{ $lookerHost | quote }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api/internal/
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: {{ printf "%s-web" $lookerName }}
+          port: {{ $lookerWebPort }}
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api/
+        - path:
+            type: PathPrefix
+            value: /api-docs/
+        - path:
+            type: PathPrefix
+            value: /versions
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: {{ printf "hrns-%s-api" $lookerName }}
+          port: {{ $lookerApiPort }}
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: {{ printf "%s-web" $lookerName }}
+          port: {{ $lookerWebPort }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "harnessGatewayOverlay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "ciliumNetworkPolicy"],
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Render the Harness Gateway API overlay resources."
+        },
+        "ciliumNetworkPolicy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled"],
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Render the additive Envoy-to-Harness Cilium allow rule."
+            }
+          }
+        }
+      }
+    }
+  },
+  "required": ["harnessGatewayOverlay"],
+  "additionalProperties": true
+}

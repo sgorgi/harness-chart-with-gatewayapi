@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PLATFORM_VERSION='0.42.1'
+PLATFORM_ARCHIVE_SHA256='cc793123b6c8658fe28bbdd3d1b1b7f44dcc350cbbe91fbbf1ad92e9ecaa0250'
+PLATFORM_ARCHIVE_URL="https://github.com/harness/helm-charts/releases/download/platform-${PLATFORM_VERSION}/platform-${PLATFORM_VERSION}.tgz"
+
+fail() {
+  printf 'Error: %s\n' "$*" >&2
+  exit 1
+}
+
+sha256_file() {
+  local file=$1
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$file" | awk '{ print $1 }'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$file" | awk '{ print $1 }'
+  else
+    fail 'sha256sum or shasum is required'
+  fi
+}
+
+[[ $# -eq 1 ]] || fail 'usage: fetch-platform-chart <destination-directory>'
+
+destination=$1
+[[ -n "$destination" ]] || fail 'destination directory must not be empty'
+[[ ! -e "$destination" ]] || fail "destination already exists: $destination"
+
+download_tmp=$(mktemp -d "${TMPDIR:-/tmp}/harness-platform-download.XXXXXX")
+trap 'rm -rf -- "$download_tmp"' EXIT HUP INT TERM
+archive="$download_tmp/platform-${PLATFORM_VERSION}.tgz"
+
+if [[ -n "${HARNESS_PLATFORM_ARCHIVE:-}" ]]; then
+  [[ -f "$HARNESS_PLATFORM_ARCHIVE" ]] || \
+    fail "HARNESS_PLATFORM_ARCHIVE is not a file: $HARNESS_PLATFORM_ARCHIVE"
+  cp "$HARNESS_PLATFORM_ARCHIVE" "$archive"
+else
+  command -v curl >/dev/null 2>&1 || fail 'curl is required to download the Harness chart'
+  curl --fail --location --silent --show-error \
+    --proto '=https' --tlsv1.2 \
+    "$PLATFORM_ARCHIVE_URL" \
+    --output "$archive"
+fi
+
+actual_sha256=$(sha256_file "$archive")
+[[ "$actual_sha256" == "$PLATFORM_ARCHIVE_SHA256" ]] || \
+  fail "Harness chart checksum mismatch: expected $PLATFORM_ARCHIVE_SHA256, got $actual_sha256"
+
+if tar -tzf "$archive" | awk '
+  index($0, "platform/") != 1 || $0 ~ /(^|\/)\.\.($|\/)/ { invalid=1 }
+  END { exit invalid ? 0 : 1 }
+'; then
+  fail 'Harness chart contains an unexpected archive path'
+fi
+
+tar -xzf "$archive" -C "$download_tmp"
+[[ -f "$download_tmp/platform/Chart.yaml" ]] || fail 'downloaded chart has no platform/Chart.yaml'
+
+mkdir -p "$(dirname -- "$destination")"
+mv "$download_tmp/platform" "$destination"
+printf 'Harness Platform %s extracted to %s\n' "$PLATFORM_VERSION" "$destination"

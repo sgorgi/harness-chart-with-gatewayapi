@@ -1,0 +1,211 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "psych"
+
+LISTENER_SET_NAME = "harness-listeners"
+HARNESS_SECTION_NAME = "harness-https"
+GATEWAY_API_GROUP = "gateway.networking.k8s.io"
+HTTP_ROUTE_API_VERSION = "gateway.networking.k8s.io/v1"
+
+def normalize_document_boundaries(input)
+  output = []
+  seen_api_version = false
+
+  input.each_line do |line|
+    if line.match?(/\A(?:---|\.\.\.)(?:\s+#.*)?\s*\z/)
+      seen_api_version = false
+      output << line
+      next
+    end
+
+    if line.start_with?("apiVersion:")
+      output << "---\n" if seen_api_version
+      seen_api_version = true
+    end
+
+    output << line
+  end
+
+  output
+end
+
+def mapping_entry(mapping, wanted_key)
+  return nil unless mapping.is_a?(Psych::Nodes::Mapping)
+
+  mapping.children.each_slice(2).find do |key_node, _value_node|
+    key_node.is_a?(Psych::Nodes::Scalar) && key_node.value == wanted_key
+  end
+end
+
+def scalar_value(node, context)
+  unless node.is_a?(Psych::Nodes::Scalar)
+    raise "#{context} must be a scalar"
+  end
+
+  node.value
+end
+
+def mapping_value(mapping, key, context, required: false)
+  entry = mapping_entry(mapping, key)
+  if entry.nil?
+    raise "#{context}.#{key} is required" if required
+    return nil
+  end
+
+  scalar_value(entry[1], "#{context}.#{key}")
+end
+
+def desired_scalar_edit(mapping, key, desired, context, replacements, insertions, anchor_entry)
+  entry = mapping_entry(mapping, key)
+  if entry
+    current = scalar_value(entry[1], "#{context}.#{key}")
+    return if current == desired
+
+    if current.nil? || current.empty?
+      value_node = entry[1]
+      unless value_node.start_line == value_node.end_line
+        raise "#{context}.#{key} must be a single-line scalar"
+      end
+
+      line_index = value_node.start_line
+      replacements[line_index] ||= []
+      replacement = value_node.start_column == value_node.end_column ? " #{desired}" : desired
+      replacements[line_index] << [value_node.start_column, value_node.end_column, replacement]
+      return
+    end
+
+    raise "#{context}.#{key} is #{current.inspect}; expected #{desired.inspect}"
+  end
+
+  indent = " " * anchor_entry[0].start_column
+  insertion_line = anchor_entry[1].end_line + 1
+  insertions[insertion_line] ||= []
+  insertions[insertion_line] << "#{indent}#{key}: #{desired}\n"
+end
+
+def patch_parent_refs(lines)
+  yaml = lines.join
+  stream = Psych.parse_stream(yaml, "helm-post-render-input")
+  replacements = {}
+  insertions = {}
+  target_count = 0
+
+  stream.children.each_with_index do |document, document_index|
+    root = document.children.first
+    next unless root.is_a?(Psych::Nodes::Mapping)
+
+    api_version = mapping_value(root, "apiVersion", "document #{document_index}")
+    kind = mapping_value(root, "kind", "document #{document_index}")
+    next unless kind == "HTTPRoute"
+    unless api_version == HTTP_ROUTE_API_VERSION
+      raise "HTTPRoute document #{document_index} uses unsupported apiVersion #{api_version.inspect}"
+    end
+
+    metadata_entry = mapping_entry(root, "metadata")
+    spec_entry = mapping_entry(root, "spec")
+    unless metadata_entry && spec_entry
+      raise "HTTPRoute document #{document_index} metadata and spec are required"
+    end
+
+    metadata = metadata_entry[1]
+    spec = spec_entry[1]
+    unless metadata.is_a?(Psych::Nodes::Mapping) && spec.is_a?(Psych::Nodes::Mapping)
+      raise "HTTPRoute document #{document_index} metadata and spec must be mappings"
+    end
+
+    route_name = mapping_value(metadata, "name", "HTTPRoute metadata", required: true)
+    route_namespace = mapping_value(metadata, "namespace", "HTTPRoute #{route_name} metadata")
+    parent_refs_entry = mapping_entry(spec, "parentRefs")
+    unless parent_refs_entry
+      raise "HTTPRoute #{route_name} spec.parentRefs is required"
+    end
+
+    parent_refs = parent_refs_entry[1]
+    unless parent_refs.is_a?(Psych::Nodes::Sequence)
+      raise "HTTPRoute #{route_name} spec.parentRefs must be a sequence"
+    end
+
+    route_target_count = 0
+    parent_refs.children.each_with_index do |parent_ref, parent_index|
+      unless parent_ref.is_a?(Psych::Nodes::Mapping)
+        raise "HTTPRoute #{route_name} parentRefs[#{parent_index}] must be a mapping"
+      end
+
+      context = "HTTPRoute #{route_name} parentRefs[#{parent_index}]"
+      name_entry = mapping_entry(parent_ref, "name")
+      next unless name_entry
+      next unless scalar_value(name_entry[1], "#{context}.name") == LISTENER_SET_NAME
+
+      section_name = mapping_value(parent_ref, "sectionName", context, required: true)
+      unless section_name == HARNESS_SECTION_NAME
+        raise "#{context}.sectionName is #{section_name.inspect}; expected #{HARNESS_SECTION_NAME.inspect}"
+      end
+
+      parent_namespace = mapping_value(parent_ref, "namespace", context)
+      if parent_namespace && !parent_namespace.empty?
+        if route_namespace.nil? || route_namespace.empty?
+          raise "#{context} has a namespace but the HTTPRoute does not"
+        end
+        unless parent_namespace == route_namespace
+          raise "#{context}.namespace is #{parent_namespace.inspect}; expected local namespace #{route_namespace.inspect}"
+        end
+      end
+
+      parent_port = mapping_value(parent_ref, "port", context)
+      if parent_port && !parent_port.empty? && parent_port != "443"
+        raise "#{context}.port is #{parent_port.inspect}; expected 443 or no port"
+      end
+
+      desired_scalar_edit(
+        parent_ref,
+        "group",
+        GATEWAY_API_GROUP,
+        context,
+        replacements,
+        insertions,
+        name_entry
+      )
+      desired_scalar_edit(
+        parent_ref,
+        "kind",
+        "ListenerSet",
+        context,
+        replacements,
+        insertions,
+        name_entry
+      )
+      route_target_count += 1
+      target_count += 1
+    end
+
+    unless route_target_count == 1
+      raise "HTTPRoute #{route_name} must contain exactly one reference to #{LISTENER_SET_NAME}/#{HARNESS_SECTION_NAME}"
+    end
+  end
+
+  if target_count.zero?
+    raise "no HTTPRoute parentRef targets #{LISTENER_SET_NAME}/#{HARNESS_SECTION_NAME}"
+  end
+
+  replacements.each do |line_index, line_replacements|
+    line_replacements.sort_by(&:first).reverse_each do |start_column, end_column, replacement|
+      lines[line_index][start_column...end_column] = replacement
+    end
+  end
+  insertions.keys.sort.reverse_each do |line_index|
+    lines.insert(line_index, *insertions[line_index])
+  end
+
+  [lines.join, target_count]
+end
+
+begin
+  original = STDIN.read
+  normalized_lines = normalize_document_boundaries(original)
+  rendered, = patch_parent_refs(normalized_lines)
+  STDOUT.write(rendered)
+rescue StandardError, Psych::SyntaxError => e
+  warn "listenerset-parentref-post-renderer: #{e.message}"
+  exit 1
+end

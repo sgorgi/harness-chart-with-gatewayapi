@@ -1,0 +1,16 @@
+apiVersion: v2
+name: harness-gateway-api
+description: Unofficial ListenerSet overlay for Harness Platform and Envoy Gateway
+type: application
+version: 0.2.0
+appVersion: "1.8.3"
+keywords:
+  - harness
+  - gateway-api
+  - envoy-gateway
+  - listenerset
+annotations:
+  artifacthub.io/license: Apache-2.0
+  harness.io/tested-platform-version: "0.42.1"
+  gateway.envoyproxy.io/tested-version: "1.8.3"
+  gateway.networking.k8s.io/tested-version: "1.5.1"

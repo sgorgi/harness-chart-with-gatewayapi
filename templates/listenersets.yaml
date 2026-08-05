@@ -1,0 +1,68 @@
+{{- if .Values.harnessGatewayOverlay.enabled }}
+{{- $allValues := fromYaml (toYaml .Values) }}
+{{- $harnessHost := required "global.ingress.hosts[0] is required in the existing Harness values" (first (dig "global" "ingress" "hosts" (list) $allValues)) }}
+{{- $harnessTlsSecret := required "global.ingress.tls.secretName is required in the existing Harness values" (dig "global" "ingress" "tls" "secretName" "" $allValues) }}
+{{- $lookerEnabled := dig "global" "ngcustomdashboard" "enabled" false $allValues }}
+{{- $lookerHost := "" }}
+{{- $lookerTlsSecret := $harnessTlsSecret }}
+{{- if $lookerEnabled }}
+{{- $lookerHost = required "looker.ingress.hosts[0] is required when global.ngcustomdashboard.enabled is true" (first (dig "looker" "ingress" "hosts" (list) $allValues)) }}
+{{- $lookerTlsSecret = dig "looker" "ingress" "tls" "secretName" "" $allValues | default $harnessTlsSecret }}
+{{- if eq $harnessHost $lookerHost }}
+{{- fail "Harness and Looker must use separate FQDNs" }}
+{{- end }}
+{{- end }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: ListenerSet
+metadata:
+  name: {{ include "harness-gateway-api.listenerSetName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "harness-gateway-api.labels" . | nindent 4 }}
+  {{- with (include "harness-gateway-api.annotations" . | fromYaml) }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  parentRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: {{ include "harness-gateway-api.gatewayName" . }}
+    namespace: {{ include "harness-gateway-api.gatewayNamespace" . }}
+  listeners:
+    - name: {{ include "harness-gateway-api.harnessSectionName" . }}
+      hostname: {{ $harnessHost | quote }}
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - group: ""
+            kind: Secret
+            name: {{ $harnessTlsSecret | quote }}
+      allowedRoutes:
+        namespaces:
+          from: Same
+        kinds:
+          - group: gateway.networking.k8s.io
+            kind: HTTPRoute
+    {{- if $lookerEnabled }}
+    - name: {{ include "harness-gateway-api.lookerSectionName" . }}
+      hostname: {{ $lookerHost | quote }}
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - group: ""
+            kind: Secret
+            name: {{ $lookerTlsSecret | quote }}
+      allowedRoutes:
+        namespaces:
+          from: Same
+        kinds:
+          - group: gateway.networking.k8s.io
+            kind: HTTPRoute
+    {{- end }}
+{{- end }}
