@@ -1,0 +1,33 @@
+name: Feature request
+description: Propose a focused improvement to the overlay.
+title: "[Feature]: "
+body:
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      description: Describe the problem and why it should be solved by this overlay.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the desired manifests, compatibility behavior, or workflow.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Include any upstream Harness or Gateway API capability that may already address the use case.
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      options:
+        - label: This request does not require committing private values or credentials.
+          required: true

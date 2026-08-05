@@ -1,0 +1,25 @@
+.DS_Store
+*.tgz
+/platform/
+
+# Local editor and operating-system state.
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Local environment and cluster credentials.
+.env
+.env.*
+!.env.example
+/kubeconfig*
+/*.key
+/*.pem
+/*.p12
+
+# Local values must never become public configuration by accident.
+/values.local.yaml
+/values-*.local.yaml
+/values-private.yaml
+/override.local.yaml

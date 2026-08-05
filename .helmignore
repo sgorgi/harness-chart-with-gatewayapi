@@ -1,0 +1,20 @@
+# Keep the overlay package small and exclude repository metadata.
+.DS_Store
+.git/
+.github/
+.editorconfig
+.gitattributes
+.gitignore
+*.tgz
+tests/
+scripts/test
+scripts/fetch-platform-chart
+CONTRIBUTING.md
+PUBLICATION_CHECKLIST.md
+SECURITY.md
+SUPPORT.md
+UPSTREAM.md
+
+# Harness renders its own generic HTTPRoutes. The overlay package is therefore
+# independent of the external Platform chart contents.
+platform/

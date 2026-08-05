@@ -1,0 +1,8 @@
+* text=auto eol=lf
+
+*.sh text eol=lf
+*.rb text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.tpl text eol=lf
+scripts/listenerset-parentref-post-renderer text eol=lf

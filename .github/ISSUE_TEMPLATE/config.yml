@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Harness Helm Charts
+    url: https://github.com/harness/helm-charts/issues
+    about: Report issues in the upstream Harness Platform chart here.
+  - name: Envoy Gateway
+    url: https://github.com/envoyproxy/gateway/issues
+    about: Report Envoy Gateway controller or data-plane issues here.
