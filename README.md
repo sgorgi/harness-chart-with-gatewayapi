@@ -80,6 +80,180 @@ the overlay and Platform chart do not assume different subchart defaults.
 The agreed architecture accepts exactly one concrete Harness FQDN and, when
 Looker is enabled, exactly one distinct Looker FQDN.
 
+## Integrating the Resources into an Existing Custom Chart
+
+You can add these Gateway API resources to an existing Helm chart that already
+contains other custom manifests. The custom chart must be installed in the
+same namespace as Harness because the ListenerSet, HTTPRoutes, ReferenceGrant,
+Services, and TLS Secrets are namespace-local.
+
+The Harness Platform chart should remain a separate Helm release. Do not add
+it as a dependency of the custom chart solely for this integration.
+
+### 1. Copy the Templates
+
+Copy the following files from this repository into the existing chart's
+`templates/` directory. The destination names are recommendations that avoid
+overwriting generic filenames already present in the chart; Helm does not
+require the source filenames to be preserved.
+
+<!-- markdownlint-disable MD013 -->
+
+| Source file | Recommended destination | Purpose |
+| --- | --- | --- |
+| `templates/_helpers.tpl` | `templates/_harness-gateway-api.tpl` | Fixed Gateway contract, names, labels, and annotations |
+| `templates/validation.yaml` | `templates/harness-gateway-api-validation.yaml` | Fail-fast validation of the existing Harness values |
+| `templates/listenersets.yaml` | `templates/harness-gateway-api-listenersets.yaml` | Harness and optional Looker HTTPS listeners |
+| `templates/httproutes.yaml` | `templates/harness-gateway-api-httproutes.yaml` | NextGen UI and optional Looker routes not emitted by Harness 0.42.1 |
+| `templates/referencegrant.yaml` | `templates/harness-gateway-api-referencegrant.yaml` | Narrow TLS Secret trust declaration for the centralized Gateway |
+| `templates/ciliumnetworkpolicy.yaml` | `templates/harness-gateway-api-ciliumnetworkpolicy.yaml` | Optional Envoy-to-Harness Cilium allow rule |
+
+<!-- markdownlint-enable MD013 -->
+
+Copy `_helpers.tpl` under the recommended distinct filename instead of
+replacing the custom chart's existing `_helpers.tpl`. The named templates
+inside it use the `harness-gateway-api.*` prefix and must remain available to
+all five remaining templates.
+
+All six files can be copied safely. The CiliumNetworkPolicy template remains
+dormant while its value is `false`. If Cilium is not used at all, that one
+template may be omitted.
+
+Do not replace the existing chart's `Chart.yaml`, `values.yaml`, or
+`values.schema.json` with files from this repository. The test fixtures,
+download helper, and standalone chart metadata are not required by the
+combined custom chart.
+
+### 2. Add Only the New Values
+
+Merge only this block into the existing custom chart's `values.yaml`:
+
+```yaml
+harnessGatewayOverlay:
+  enabled: true
+
+  ciliumNetworkPolicy:
+    enabled: false
+```
+
+These are the only values introduced by the overlay. Keep the Cilium policy
+disabled until the Envoy data-plane labels and existing default-deny policies
+have been verified.
+
+If the custom chart has a strict `values.schema.json`, merge the
+`harnessGatewayOverlay` property definition from this repository's schema
+into its existing root `properties`. Do not replace the existing schema. A
+schema with `additionalProperties: false` must also declare the reused
+`global`, `looker`, and `next-gen-ui` paths listed below, or Helm will reject
+them before rendering.
+
+### 3. Supply the Existing Harness Values
+
+The copied templates intentionally reuse the existing Harness configuration
+instead of introducing duplicate FQDN, Secret, Service, or feature values.
+They therefore need these existing Harness paths in the values passed to the
+custom chart:
+
+- `global.ingress.enabled`, `global.ingress.hosts`, and
+  `global.ingress.tls.{enabled,secretName}`
+- `global.gatewayAPI.enabled` and `global.gatewayAPI.parentRef`
+- Explicit Boolean values for `global.ng.enabled`, `global.cg.enabled`, and
+  `global.ngcustomdashboard.enabled`
+- When Looker is enabled, `looker.ingress.hosts` and, when it does not use the
+  Harness certificate, `looker.ingress.tls.secretName`
+- Existing `next-gen-ui` or `looker` name and Service-port overrides, if they
+  differ from the Harness 0.42.1 defaults
+
+The exact required values and placeholders are shown in the Values Contract
+above. In particular, the native Harness HTTPRoutes must use:
+
+```yaml
+global:
+  gatewayAPI:
+    enabled: true
+    parentRef:
+      name: harness-listeners
+      namespace: harness
+      sectionName: harness-https
+```
+
+Replace `harness` with the namespace used by both Helm releases. The namespace
+may also be omitted from this ParentRef; when present, it must equal the Helm
+release namespace.
+
+If the existing Harness values file contains only non-sensitive deployment
+configuration, it can also be passed to the custom chart. The custom chart's
+own `values.yaml` is loaded automatically:
+
+```sh
+helm upgrade --install custom-manifests /path/to/custom-chart \
+  --namespace harness \
+  --create-namespace \
+  -f /path/to/existing-harness-values.yaml
+```
+
+Helm stores supplied values in the release metadata. Do not pass a complete
+production Harness values file to the custom release when it contains
+credentials or other confidential data. In that case, create a minimal
+environment-specific routing values file containing only the existing paths
+listed above, and pass that file instead.
+
+Additional environment-specific custom values can be supplied with another
+`-f` argument. Helm applies files from left to right, so place intentional
+custom overrides last.
+
+### 4. Keep the Post-Renderer with the Harness Release
+
+Copying the templates creates the ListenerSet, ReferenceGrant, and the few
+special-case HTTPRoutes. The generic HTTPRoutes are still rendered by Harness
+Platform 0.42.1 and require the included post-renderer to complete their
+ListenerSet ParentRefs.
+
+The post-renderer is deployment tooling, not a Helm template:
+
+- For Helm 3, retain `scripts/listenerset-parentref-post-renderer`, keep it
+  executable, and pass its path to the Harness Platform Helm command.
+- For Helm 4, retain `scripts/plugin.yaml` and
+  `scripts/listenerset-parentref-post-renderer` in the same directory, install
+  that directory as the plugin, and use the plugin name shown below.
+
+Apply the post-renderer to the separate Harness Platform release, not to the
+custom-manifests release. It intentionally validates every rendered
+`gateway.networking.k8s.io/v1` HTTPRoute and will fail closed when unrelated
+HTTPRoutes do not target `harness-listeners/harness-https`.
+
+If Harness Platform is already embedded as a dependency in the existing
+custom chart, do not use the post-renderer unchanged when that combined render
+also contains unrelated HTTPRoutes. Keep the releases separate, or adapt and
+retest the post-renderer for the combined resource set.
+
+### 5. Render and Verify the Combined Custom Chart
+
+Render the custom chart with the same namespace and Harness values before
+installing it:
+
+```sh
+helm template custom-manifests /path/to/custom-chart \
+  --namespace harness \
+  -f /path/to/existing-harness-values.yaml \
+  > /tmp/custom-manifests.yaml
+```
+
+With the matching CRDs installed in a test cluster, a server-side dry run can
+also validate the generated resources:
+
+```sh
+kubectl apply --dry-run=server -f /tmp/custom-manifests.yaml
+```
+
+The render should contain one ListenerSet and one ReferenceGrant. It should
+also contain the `harness-ui` HTTPRoute when NextGen UI is enabled without
+Classic UI, the `looker` HTTPRoute and listener when Looker is enabled, and a
+CiliumNetworkPolicy only when its explicit opt-in value is `true`.
+
+When redistributing a chart containing these copied templates, retain the
+Apache-2.0 license and attribution from this repository.
+
 ## Rendering and Installation
 
 First, install the overlay in the same namespace as Harness:
