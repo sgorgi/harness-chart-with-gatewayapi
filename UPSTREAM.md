@@ -30,7 +30,7 @@ Use a dedicated pull request for a new Harness Platform chart version:
    `scripts/fetch-platform-chart`.
 3. Update the release, commit, and checksum in this file and the tested
    version annotation in `Chart.yaml`.
-4. Review all post-renderer compatibility assumptions.
+4. Review all Ingress conversion and generated-inventory assumptions.
 5. Run the complete contract suite with both supported Helm major versions.
 
 Do not commit the downloaded chart, its extracted `platform/` directory, or

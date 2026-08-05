@@ -1,9 +1,12 @@
 apiVersion: v2
 name: harness-gateway-api
-description: Unofficial ListenerSet overlay for Harness Platform and Envoy Gateway
+description: Unofficial Ingress-derived Gateway API overlay for Harness Platform
 type: application
-version: 0.2.0
-appVersion: "1.8.3"
+version: 0.3.0
+appVersion: "0.3.0"
+home: https://github.com/sgorgi/harness-chart-with-gatewayapi
+sources:
+  - https://github.com/sgorgi/harness-chart-with-gatewayapi
 keywords:
   - harness
   - gateway-api

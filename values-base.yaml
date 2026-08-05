@@ -1,11 +1,6 @@
-# This file contains only switches introduced by this overlay. Supply the
-# existing Harness platform values first so hostnames, TLS Secrets and feature
-# flags remain owned by the Harness configuration:
-#
-#   helm template harness-gateway-api . \
-#     --namespace <harness-namespace> \
-#     -f <existing-platform-values>.yaml \
-#     -f values-base.yaml
+# This file contains only switches introduced by this overlay. Environment
+# hostnames, TLS Secret names, paths and backends are discovered from the
+# Ingress resources rendered with the target environment's Harness values.
 
 harnessGatewayOverlay:
   enabled: true

@@ -1,38 +1,28 @@
 {{- if .Values.harnessGatewayOverlay.enabled }}
-{{- $allValues := fromYaml (toYaml .Values) }}
-{{- $harnessTlsSecret := required "global.ingress.tls.secretName is required in the existing Harness values" (dig "global" "ingress" "tls" "secretName" "" $allValues) }}
-{{- $lookerEnabled := dig "global" "ngcustomdashboard" "enabled" false $allValues }}
-{{- $lookerTlsSecret := $harnessTlsSecret }}
-{{- if $lookerEnabled }}
-{{- $lookerTlsSecret = dig "looker" "ingress" "tls" "secretName" "" $allValues | default $harnessTlsSecret }}
-{{- end }}
+{{- $inventory := include "harness-gateway-api.inventory" . | fromJson }}
+{{- $tlsSecrets := get $inventory "tlsSecrets" }}
+{{- if $tlsSecrets }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: ReferenceGrant
 metadata:
-  name: {{ include "harness-gateway-api.referenceGrantName" . }}
-  namespace: {{ .Release.Namespace }}
+  name: {{ include "harness-gateway-api.referenceGrantName" . | quote }}
+  namespace: {{ .Release.Namespace | quote }}
   labels:
     {{- include "harness-gateway-api.labels" . | nindent 4 }}
-  {{- with (include "harness-gateway-api.annotations" . | fromYaml) }}
   annotations:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
+    harness-gateway-api.io/routing-contract-sha256: {{ dig "source" "routingContractSha256" "" $inventory | quote }}
 spec:
-  # This explicit trust declaration is retained for the centralized Gateway.
-  # The current ListenerSet certificateRefs are namespace-local and therefore
-  # do not technically depend on this ReferenceGrant.
+  # Authorize only TLS Secrets discovered from the rendered Ingress contract.
   from:
     - group: gateway.networking.k8s.io
       kind: Gateway
-      namespace: {{ include "harness-gateway-api.gatewayNamespace" . }}
+      namespace: {{ include "harness-gateway-api.gatewayNamespace" . | quote }}
   to:
+    {{- range ($tlsSecrets | uniq | sortAlpha) }}
     - group: ""
       kind: Secret
-      name: {{ $harnessTlsSecret | quote }}
-    {{- if and $lookerEnabled (ne $lookerTlsSecret $harnessTlsSecret) }}
-    - group: ""
-      kind: Secret
-      name: {{ $lookerTlsSecret | quote }}
+      name: {{ . | quote }}
     {{- end }}
+{{- end }}
 {{- end }}

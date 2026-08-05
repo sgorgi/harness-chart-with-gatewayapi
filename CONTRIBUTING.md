@@ -6,19 +6,19 @@ licensed under the Apache License 2.0 in this repository.
 ## Development Requirements
 
 - Bash
-- Helm 4
-- Ruby with the standard `psych` library
+- Helm 3.19 or 4.2
 - ShellCheck for local shell validation
+- `curl` and either `sha256sum` or `shasum` for the pinned upstream test
 
 ## Before Opening a Pull Request
 
 Run the complete contract suite and the static checks:
 
 ```sh
-./scripts/test
+bash ./scripts/test
 helm lint . --strict
-shellcheck -s bash scripts/test scripts/fetch-platform-chart tests/render_contract_test.sh
-ruby -c scripts/listenerset-parentref-post-renderer
+shellcheck -s bash scripts/test scripts/fetch-platform-chart \
+  scripts/generate-gateway-api tests/render_contract_test.sh
 ```
 
 Please also confirm that:
@@ -26,6 +26,7 @@ Please also confirm that:
 - No Harness chart archive or extracted `platform/` directory is committed.
 - `values.yaml` and `values-base.yaml` contain only values introduced by this
   overlay.
+- Generated environment inventories are reproducible and are not committed.
 - Documentation, comments, commit messages, and user-facing errors are in
   English.
 - Tests cover changed rendering behavior and compatibility assumptions.

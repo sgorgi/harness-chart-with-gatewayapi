@@ -25,7 +25,8 @@ process.
 
 ## Scope
 
-Reports concerning the overlay templates, download checksum verification,
-post-renderer, packaging, or CI are in scope. Product entitlements, commercial
-support, cluster operations, and upstream application vulnerabilities are
-outside this project's support scope.
+Reports concerning the overlay templates, Ingress conversion, generated
+routing inventory, download checksum verification, packaging, or CI are in
+scope. Product entitlements, commercial support, cluster operations, and
+upstream application vulnerabilities are outside this project's support
+scope.

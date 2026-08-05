@@ -19,6 +19,7 @@
   {{- printf "#INSPECT\tJSON\t%s\n" (toJson (index $documents 0)) -}}
 {{- else -}}
   {{- $servicePorts := dict -}}
+  {{- $filterRewrites := dict -}}
   {{- range $document := $documents -}}
     {{- if eq (get $document "kind") "Service" -}}
       {{- $namespace := dig "metadata" "namespace" "" $document -}}
@@ -28,6 +29,12 @@
           {{- $_ := set $servicePorts (printf "%s\t%s\t%s" $namespace $name (get $port "name")) (get $port "port") -}}
         {{- end -}}
       {{- end -}}
+    {{- end -}}
+    {{- if eq (get $document "kind") "HTTPRouteFilter" -}}
+      {{- $filterName := dig "metadata" "name" "" $document -}}
+      {{- $_ := set $filterRewrites $filterName (dict
+            "pattern" (dig "spec" "urlRewrite" "path" "replaceRegexMatch" "pattern" "" $document)
+            "substitution" (dig "spec" "urlRewrite" "path" "replaceRegexMatch" "substitution" "" $document)) -}}
     {{- end -}}
   {{- end -}}
 
@@ -53,7 +60,9 @@
 
     {{- if eq $kind "HTTPRoute" -}}
       {{- $rules := dig "spec" "rules" (list) $document -}}
+      {{- $sourceIngress := dig "metadata" "annotations" "harness-gateway-api.io/source-ingress" "" $document -}}
       {{- printf "#INSPECT\tROUTE_META\t%s\t%s\t%d\n" $name $namespace (len $rules) -}}
+      {{- printf "#INSPECT\tROUTE_SOURCE\t%s\t%s\n" $name $sourceIngress -}}
       {{- $targetsListenerSet := false -}}
       {{- range $parent := dig "spec" "parentRefs" (list) $document -}}
         {{- if eq (get $parent "name" | default "") $targetListenerSet -}}
@@ -70,11 +79,31 @@
             {{- $matches := get $rule "matches" | default (list (dict)) -}}
             {{- range $match := $matches -}}
               {{- $path := dig "path" "value" "/" $match -}}
+              {{- $pathType := dig "path" "type" "PathPrefix" $match -}}
+              {{- printf "#INSPECT\tROUTE_MATCH\t%s\t%s\t%s\t%s\n" $name $hostname $pathType $path -}}
+              {{- range $filter := get $rule "filters" | default (list) -}}
+                {{- $extensionRef := get $filter "extensionRef" | default (dict) -}}
+                {{- $extensionName := get $extensionRef "name" | default "" -}}
+                {{- printf "#INSPECT\tROUTE_FILTER\t%s\t%s\t%s\t%s\t%s\t%s\n" $name $path (get $filter "type" | default "") (get $extensionRef "group" | default "") (get $extensionRef "kind" | default "") $extensionName -}}
+                {{- if and
+                      (eq (get $filter "type" | default "") "ExtensionRef")
+                      (eq (get $extensionRef "group" | default "") "gateway.envoyproxy.io")
+                      (eq (get $extensionRef "kind" | default "") "HTTPRouteFilter")
+                      (hasKey $filterRewrites $extensionName) -}}
+                  {{- $rewrite := get $filterRewrites $extensionName -}}
+                  {{- printf "#INSPECT\tROUTE_REWRITE\t%s\t%s\t%s\t%s\t%s\n" $sourceIngress $hostname $path (get $rewrite "pattern") (get $rewrite "substitution") -}}
+                {{- end -}}
+              {{- end -}}
+              {{- $timeouts := get $rule "timeouts" | default (dict) -}}
+              {{- if $timeouts -}}
+                {{- printf "#INSPECT\tROUTE_TIMEOUT\t%s\t%s\t%s\t%s\n" $name $path (get $timeouts "request" | default "") (get $timeouts "backendRequest" | default "") -}}
+              {{- end -}}
               {{- range $backend := get $rule "backendRefs" | default (list) -}}
                 {{- $backendGroup := get $backend "group" | default "" -}}
                 {{- $backendKind := get $backend "kind" | default "Service" -}}
                 {{- if and (eq $backendGroup "") (eq $backendKind "Service") -}}
                   {{- printf "#INSPECT\tROUTE_BACKEND\t%s\t%s\t%s\t%s\t%v\n" $name $hostname $path (get $backend "name" | default "") (get $backend "port" | default "") -}}
+                  {{- printf "#INSPECT\tROUTE_SEMANTIC_MATCH\t%s\t%s\t%s\t%s\t%s\t%v\n" $sourceIngress $hostname $pathType $path (get $backend "name" | default "") (get $backend "port" | default "") -}}
                 {{- end -}}
               {{- end -}}
             {{- end -}}
@@ -83,10 +112,60 @@
       {{- end -}}
     {{- end -}}
 
+    {{- if eq $kind "HTTPRouteFilter" -}}
+      {{- printf "#INSPECT\tFILTER_REWRITE\t%s\t%s\t%s\n" $name (dig "spec" "urlRewrite" "path" "replaceRegexMatch" "pattern" "" $document) (dig "spec" "urlRewrite" "path" "replaceRegexMatch" "substitution" "" $document) -}}
+    {{- end -}}
+
+    {{- if eq $kind "BackendTrafficPolicy" -}}
+      {{- range $target := dig "spec" "targetRefs" (list) $document -}}
+        {{- printf "#INSPECT\tBACKEND_TRAFFIC_POLICY\t%s\t%s\t%s\t%s\t%s\n" $name (get $target "group" | default "") (get $target "kind" | default "") (get $target "name" | default "") (dig "spec" "timeout" "http" "streamIdleTimeout" "" $document) -}}
+      {{- end -}}
+    {{- end -}}
+
     {{- if eq $kind "Ingress" -}}
+      {{- $annotations := dig "metadata" "annotations" (dict) $document | default (dict) -}}
+      {{- $useRegex := eq (lower (toString (get $annotations "nginx.ingress.kubernetes.io/use-regex" | default "false"))) "true" -}}
+      {{- $rewriteTarget := toString (get $annotations "nginx.ingress.kubernetes.io/rewrite-target" | default "") -}}
+      {{- $expectedSubstitution := regexReplaceAll "\\$" $rewriteTarget "\\" -}}
+      {{- $readTimeoutSeconds := -1 -}}
+      {{- if hasKey $annotations "nginx.ingress.kubernetes.io/proxy-read-timeout" -}}
+        {{- $readTimeoutSeconds = atoi (toString (get $annotations "nginx.ingress.kubernetes.io/proxy-read-timeout")) -}}
+      {{- end -}}
+      {{- $sendTimeoutSeconds := -1 -}}
+      {{- if hasKey $annotations "nginx.ingress.kubernetes.io/proxy-send-timeout" -}}
+        {{- $sendTimeoutSeconds = atoi (toString (get $annotations "nginx.ingress.kubernetes.io/proxy-send-timeout")) -}}
+      {{- end -}}
+      {{- $idleTimeoutSeconds := -1 -}}
+      {{- if ge $readTimeoutSeconds 0 -}}
+        {{- $idleTimeoutSeconds = $readTimeoutSeconds -}}
+      {{- end -}}
+      {{- if and (ge $sendTimeoutSeconds 0) (or (lt $idleTimeoutSeconds 0) (lt $sendTimeoutSeconds $idleTimeoutSeconds)) -}}
+        {{- $idleTimeoutSeconds = $sendTimeoutSeconds -}}
+      {{- end -}}
+      {{- printf "#INSPECT\tINGRESS_META\t%s\t%s\n" $name $namespace -}}
+      {{- if ge $idleTimeoutSeconds 0 -}}
+        {{- printf "#INSPECT\tINGRESS_TIMEOUT\t%s\t%ds\n" $name $idleTimeoutSeconds -}}
+      {{- end -}}
+      {{- range $tls := dig "spec" "tls" (list) $document -}}
+        {{- range $hostname := get $tls "hosts" | default (list) -}}
+          {{- printf "#INSPECT\tINGRESS_TLS\t%s\t%s\t%s\n" $name $hostname (get $tls "secretName" | default "") -}}
+        {{- end -}}
+      {{- end -}}
       {{- range $rule := dig "spec" "rules" (list) $document -}}
         {{- $hostname := get $rule "host" | default "" -}}
         {{- range $path := dig "http" "paths" (list) $rule -}}
+          {{- $sourcePath := get $path "path" | default "/" -}}
+          {{- $sourcePathType := get $path "pathType" | default "ImplementationSpecific" -}}
+          {{- $gatewayPath := $sourcePath -}}
+          {{- $gatewayPathType := "PathPrefix" -}}
+          {{- if or $useRegex (not (empty $rewriteTarget)) -}}
+            {{- $gatewayPathType = "RegularExpression" -}}
+            {{- if not (hasPrefix "(?i)" $gatewayPath) -}}
+              {{- $gatewayPath = printf "(?i)%s" $gatewayPath -}}
+            {{- end -}}
+          {{- else if eq $sourcePathType "Exact" -}}
+            {{- $gatewayPathType = "Exact" -}}
+          {{- end -}}
           {{- $serviceName := dig "backend" "service" "name" "" $path -}}
           {{- $portReference := dig "backend" "service" "port" (dict) $path -}}
           {{- $port := get $portReference "number" | default "" -}}
@@ -94,6 +173,11 @@
             {{- $port = get $servicePorts (printf "%s\t%s\t%s" $namespace $serviceName (get $portReference "name")) | default (get $portReference "name") -}}
           {{- end -}}
           {{- printf "#INSPECT\tINGRESS_BACKEND\t%s\t%s\t%s\t%v\n" $hostname (get $path "path" | default "/") $serviceName $port -}}
+          {{- printf "#INSPECT\tINGRESS_MATCH\t%s\t%s\t%s\t%s\t%s\t%v\n" $name $hostname (get $path "pathType" | default "") (get $path "path" | default "/") $serviceName $port -}}
+          {{- printf "#INSPECT\tINGRESS_SEMANTIC_MATCH\t%s\t%s\t%s\t%s\t%s\t%v\n" $name $hostname $gatewayPathType $gatewayPath $serviceName $port -}}
+          {{- if not (empty $rewriteTarget) -}}
+            {{- printf "#INSPECT\tINGRESS_REWRITE\t%s\t%s\t%s\t%s\t%s\n" $name $hostname $gatewayPath $gatewayPath $expectedSubstitution -}}
+          {{- end -}}
         {{- end -}}
       {{- end -}}
     {{- end -}}

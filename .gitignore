@@ -23,3 +23,9 @@
 /values-*.local.yaml
 /values-private.yaml
 /override.local.yaml
+
+# Environment-specific chart copies produced by the Gateway API generator.
+/generated-charts/
+
+# A generated routing inventory contains environment-specific infrastructure names.
+/generated/

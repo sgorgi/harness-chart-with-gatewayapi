@@ -37,15 +37,14 @@ jobs:
       - name: Verify toolchain
         run: |
           helm version --short
-          ruby --version
-          ruby -e 'require "psych"; puts "Psych #{Psych::VERSION}"'
           shellcheck --version
 
       - name: Run static checks
         run: |
-          bash -n scripts/test scripts/fetch-platform-chart tests/render_contract_test.sh
-          shellcheck -s bash scripts/test scripts/fetch-platform-chart tests/render_contract_test.sh
-          ruby -c scripts/listenerset-parentref-post-renderer
+          bash -n scripts/test scripts/fetch-platform-chart \
+            scripts/generate-gateway-api tests/render_contract_test.sh
+          shellcheck -s bash scripts/test scripts/fetch-platform-chart \
+            scripts/generate-gateway-api tests/render_contract_test.sh
 
       - name: Lint chart
         run: helm lint . --strict
@@ -64,9 +63,16 @@ jobs:
 
           grep -Fqx 'harness-gateway-api/LICENSE' <<<"$members"
           grep -Fqx 'harness-gateway-api/NOTICE' <<<"$members"
+          grep -Fqx 'harness-gateway-api/scripts/generate-gateway-api' <<<"$members"
+          grep -Fqx 'harness-gateway-api/scripts/ingress-converter/Chart.yaml' <<<"$members"
+          grep -Fqx 'harness-gateway-api/templates/backendtrafficpolicies.yaml' <<<"$members"
+          grep -Fqx 'harness-gateway-api/CONTRIBUTING.md' <<<"$members"
+          grep -Fqx 'harness-gateway-api/SECURITY.md' <<<"$members"
+          grep -Fqx 'harness-gateway-api/SUPPORT.md' <<<"$members"
+          grep -Fqx 'harness-gateway-api/UPSTREAM.md' <<<"$members"
 
-          if grep -Eq '/(platform|tests|\.github)/|/scripts/(test|fetch-platform-chart)$' <<<"$members"; then
+          if grep -Eq '/(platform|tests|\.github|generated)/|/scripts/(test|fetch-platform-chart)$' <<<"$members"; then
             printf 'Repository-only content found in packaged chart:\n' >&2
-            grep -E '/(platform|tests|\.github)/|/scripts/(test|fetch-platform-chart)$' <<<"$members" >&2
+            grep -E '/(platform|tests|\.github|generated)/|/scripts/(test|fetch-platform-chart)$' <<<"$members" >&2
             exit 1
           fi

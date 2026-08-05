@@ -1,0 +1,9 @@
+global:
+  ingress:
+    enabled: false
+  gatewayAPI:
+    enabled: true
+
+adversarial:
+  unexpectedEnvoyGatewayResource:
+    enabled: true

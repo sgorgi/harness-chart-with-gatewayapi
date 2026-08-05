@@ -1,0 +1,43 @@
+{{- if .Values.adversarial.duplicateTimeoutIngress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: harness-regex-timeout-duplicate
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "12"
+    nginx.ingress.kubernetes.io/rewrite-target: "/$2"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - harness.example.invalid
+      secretName: harness-contract-tls
+  rules:
+    - host: harness.example.invalid
+      http:
+        paths:
+          - path: /proxy(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: harness-api
+                port:
+                  name: http
+{{- end }}
+{{- if .Values.adversarial.unexpectedGatewayAPIResource.enabled }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: unexpected-gateway
+spec: {}
+{{- end }}
+{{- if .Values.adversarial.unexpectedEnvoyGatewayResource.enabled }}
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: unexpected-backend-traffic-policy
+spec: {}
+{{- end }}

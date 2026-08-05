@@ -1,0 +1,5 @@
+global:
+  ingress:
+    enabled: false
+  gatewayAPI:
+    enabled: true

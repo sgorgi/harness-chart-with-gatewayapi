@@ -1,0 +1,17 @@
+global:
+  ingress:
+    enabled: true
+  gatewayAPI:
+    enabled: true
+
+optionalIngress:
+  enabled: true
+
+looker:
+  enabled: true
+
+regexIngress:
+  enabled: true
+
+unknownAnnotationIngress:
+  enabled: false

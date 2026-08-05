@@ -9,12 +9,9 @@
 tests/
 scripts/test
 scripts/fetch-platform-chart
-CONTRIBUTING.md
 PUBLICATION_CHECKLIST.md
-SECURITY.md
-SUPPORT.md
-UPSTREAM.md
 
-# Harness renders its own generic HTTPRoutes. The overlay package is therefore
-# independent of the external Platform chart contents.
+# The external Harness chart is rendered by the generator and is never
+# redistributed with this chart.
 platform/
+generated-charts/

@@ -1,0 +1,33 @@
+global:
+  ingress:
+    enabled: true
+    hosts:
+      - harness.example.invalid
+    tls:
+      enabled: true
+      secretName: harness-contract-tls
+
+  # The generator applies a final false override so this environment value
+  # cannot accidentally enable Harness' native Gateway API templates.
+  gatewayAPI:
+    enabled: true
+
+  ng:
+    enabled: true
+  cg:
+    enabled: false
+  cdc:
+    enabled: true
+  ssca:
+    enabled: true
+  servicediscoverymanager:
+    enabled: true
+  ngcustomdashboard:
+    enabled: true
+
+looker:
+  ingress:
+    hosts:
+      - looker.example.invalid
+    tls:
+      secretName: looker-contract-tls

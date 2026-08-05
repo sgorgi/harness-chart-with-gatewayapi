@@ -1,0 +1,154 @@
+{{- if .Values.global.gatewayAPI.enabled }}
+{{- fail "the generator did not disable the source chart's native Gateway API support" }}
+{{- end }}
+{{- if .Values.global.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: harness-api
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "45"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - harness.example.invalid
+      secretName: harness-contract-tls
+  rules:
+    - host: harness.example.invalid
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: harness-api
+                port:
+                  name: http
+          - path: /exact
+            pathType: Exact
+            backend:
+              service:
+                name: harness-api
+                port:
+                  name: http
+          - path: /implementation-specific
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: harness-api
+                port:
+                  name: http
+{{- if .Values.optionalIngress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: harness-optional
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - harness.example.invalid
+      secretName: harness-contract-tls
+  rules:
+    - host: harness.example.invalid
+      http:
+        paths:
+          - path: /optional
+            pathType: Prefix
+            backend:
+              service:
+                name: harness-optional
+                port:
+                  number: 8181
+{{- end }}
+{{- if .Values.looker.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: looker
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - looker.example.invalid
+      secretName: looker-contract-tls
+  rules:
+    - host: looker.example.invalid
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: looker-api
+                port:
+                  name: api
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: looker-web
+                port:
+                  name: web
+{{- end }}
+{{- if .Values.regexIngress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: harness-regex
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: "/$2"
+{{ with .Values.regexIngress.proxyReadTimeout }}
+    nginx.ingress.kubernetes.io/proxy-read-timeout: {{ . | quote }}
+{{ end }}
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - harness.example.invalid
+      secretName: harness-contract-tls
+  rules:
+    - host: harness.example.invalid
+      http:
+        paths:
+          - path: {{ .Values.regexIngress.path | quote }}
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: harness-api
+                port:
+                  name: http
+{{- end }}
+{{- if .Values.unknownAnnotationIngress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: unsupported
+  annotations:
+    nginx.ingress.kubernetes.io/permanent-redirect: https://unsupported.example.invalid
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - harness.example.invalid
+      secretName: harness-contract-tls
+  rules:
+    - host: harness.example.invalid
+      http:
+        paths:
+          - path: /unsupported
+            pathType: Prefix
+            backend:
+              service:
+                name: harness-api
+                port:
+                  name: http
+{{- end }}
+{{- end }}

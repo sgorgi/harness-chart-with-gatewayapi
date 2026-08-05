@@ -1,0 +1,22 @@
+global:
+  ingress:
+    enabled: true
+  gatewayAPI:
+    enabled: true
+
+optionalIngress:
+  enabled: false
+
+looker:
+  enabled: false
+
+regexIngress:
+  enabled: true
+  proxyReadTimeout: "11"
+
+unknownAnnotationIngress:
+  enabled: false
+
+adversarial:
+  duplicateTimeoutIngress:
+    enabled: true

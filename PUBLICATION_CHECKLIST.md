@@ -10,15 +10,16 @@ items below after the final repository URL and owner are known.
 - Use `main` as the default branch.
 - Review the staged file list and confirm that `.DS_Store`, local values,
   kubeconfigs, certificates, keys, and packaged charts are absent.
-- Run `./scripts/test`, `helm lint . --strict`, and the static checks from
+- Run `bash ./scripts/test`, `helm lint . --strict`, and the static checks from
   `CONTRIBUTING.md`.
 - Confirm that no `platform/` directory or Harness chart archive is staged.
+- Confirm that no generated environment chart or routing inventory is staged.
 - Set a concise repository description and topics such as `helm`,
   `gateway-api`, `envoy-gateway`, and `harness`.
 
-## After the Repository URL Is Known
+## Repository Metadata
 
-- Add the public URL to `Chart.yaml` as `home` and `sources` metadata.
+- Confirm the public URL in `Chart.yaml` remains correct.
 - Add a CI badge to `README.md` if desired.
 - Add maintainer metadata only when a public contact address is available.
 - Update links if the repository is transferred or renamed.

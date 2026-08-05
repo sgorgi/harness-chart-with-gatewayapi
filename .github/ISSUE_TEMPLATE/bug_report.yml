@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a reproducible problem in the overlay or post-renderer.
+description: Report a reproducible problem in the overlay or generator.
 title: "[Bug]: "
 body:
   - type: markdown
@@ -12,7 +12,7 @@ body:
     id: overlay-version
     attributes:
       label: Overlay version
-      placeholder: 0.2.0 or commit SHA
+      placeholder: 0.3.0 or commit SHA
     validations:
       required: true
 

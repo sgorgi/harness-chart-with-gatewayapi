@@ -1,3 +1,3 @@
 {{- if .Values.harnessGatewayOverlay.enabled -}}
-{{- include "harness-gateway-api.validatePlatformContract" . -}}
+{{- $_ := include "harness-gateway-api.inventory" . -}}
 {{- end -}}

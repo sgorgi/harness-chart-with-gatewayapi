@@ -3,14 +3,10 @@
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
-  name: {{ include "harness-gateway-api.ciliumNetworkPolicyName" . }}
-  namespace: {{ .Release.Namespace }}
+  name: {{ include "harness-gateway-api.ciliumNetworkPolicyName" . | quote }}
+  namespace: {{ .Release.Namespace | quote }}
   labels:
     {{- include "harness-gateway-api.labels" . | nindent 4 }}
-  {{- with (include "harness-gateway-api.annotations" . | fromYaml) }}
-  annotations:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
 spec:
   description: Allow the apps-gateway Envoy data plane to reach Harness backends
   # The Harness workloads use different labels and ports. Keep this additive

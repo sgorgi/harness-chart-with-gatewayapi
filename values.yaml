@@ -1,8 +1,9 @@
-# harnessGatewayOverlay.enabled controls all resources owned by this overlay.
+# Generated ListenerSets and HTTPRoutes, plus the stable supporting resources,
+# are rendered only when this overlay is enabled.
 harnessGatewayOverlay:
   enabled: false
 
-  # harnessGatewayOverlay.ciliumNetworkPolicy.enabled adds an additive Cilium
-  # allow rule after the Envoy data-plane namespace and labels are confirmed.
+  # Opt in only after confirming the Envoy data-plane labels and the existing
+  # default-deny policies in the target cluster.
   ciliumNetworkPolicy:
     enabled: false

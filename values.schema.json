@@ -9,7 +9,7 @@
       "properties": {
         "enabled": {
           "type": "boolean",
-          "description": "Render the Harness Gateway API overlay resources."
+          "description": "Render generated Gateway API resources and their stable supporting resources."
         },
         "ciliumNetworkPolicy": {
           "type": "object",

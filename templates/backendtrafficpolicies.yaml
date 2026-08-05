@@ -1,0 +1,26 @@
+{{- if .Values.harnessGatewayOverlay.enabled }}
+{{- $inventory := include "harness-gateway-api.inventory" . | fromJson }}
+{{- range $policy := get $inventory "backendTrafficPolicies" }}
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: {{ $policy.name | quote }}
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{- include "harness-gateway-api.labels" $ | nindent 4 }}
+  annotations:
+    harness-gateway-api.io/source-ingress: {{ $policy.sourceIngress | quote }}
+    harness-gateway-api.io/routing-contract-sha256: {{ dig "source" "routingContractSha256" "" $inventory | quote }}
+spec:
+  # Merge the timeout with any broader central-Gateway traffic policy.
+  mergeType: StrategicMerge
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: {{ $policy.targetRoute | quote }}
+  timeout:
+    http:
+      streamIdleTimeout: {{ $policy.streamIdleTimeout | quote }}
+{{- end }}
+{{- end }}

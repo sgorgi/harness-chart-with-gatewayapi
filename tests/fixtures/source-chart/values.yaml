@@ -1,0 +1,31 @@
+global:
+  ingress:
+    enabled: true
+  gatewayAPI:
+    # The generator must apply its final false override after environment values.
+    enabled: true
+
+optionalIngress:
+  enabled: true
+
+optionalService:
+  port: 8181
+
+looker:
+  enabled: true
+
+regexIngress:
+  enabled: true
+  path: /proxy(/|$)(.*)
+  proxyReadTimeout: ""
+
+unknownAnnotationIngress:
+  enabled: false
+
+adversarial:
+  duplicateTimeoutIngress:
+    enabled: false
+  unexpectedGatewayAPIResource:
+    enabled: false
+  unexpectedEnvoyGatewayResource:
+    enabled: false
