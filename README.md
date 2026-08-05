@@ -87,8 +87,11 @@ contains other custom manifests. The custom chart must be installed in the
 same namespace as Harness because the ListenerSet, HTTPRoutes, ReferenceGrant,
 Services, and TLS Secrets are namespace-local.
 
-The Harness Platform chart should remain a separate Helm release. Do not add
-it as a dependency of the custom chart solely for this integration.
+This integration ends at the custom chart boundary: once the templates and
+values below are present, they render as ordinary resources of that chart.
+How the existing chart is installed or reconciled is intentionally outside
+the scope of this repository. No separate Helm release is required for these
+copied resources.
 
 ### 1. Copy the Templates
 
@@ -121,8 +124,8 @@ template may be omitted.
 
 Do not replace the existing chart's `Chart.yaml`, `values.yaml`, or
 `values.schema.json` with files from this repository. The test fixtures,
-download helper, and standalone chart metadata are not required by the
-combined custom chart.
+scripts, download helper, and standalone chart metadata are not required by
+the combined custom chart.
 
 ### 2. Add Only the New Values
 
@@ -177,70 +180,48 @@ global:
       sectionName: harness-https
 ```
 
-Replace `harness` with the namespace used by both Helm releases. The namespace
-may also be omitted from this ParentRef; when present, it must equal the Helm
-release namespace.
+Replace `harness` with the namespace used by both the Harness resources and
+the custom chart. The namespace may also be omitted from this ParentRef; when
+present, it must equal the custom chart's release namespace.
 
-If the existing Harness values file contains only non-sensitive deployment
-configuration, it can also be passed to the custom chart. The custom chart's
-own `values.yaml` is loaded automatically:
+Add only these non-secret names, hostnames, ports, and feature flags to the
+existing chart values that are used for the target environment. Do not copy
+credentials, private keys, or Secret contents from the Harness values. The
+templates require only the Kubernetes Secret names.
 
-```sh
-helm upgrade --install custom-manifests /path/to/custom-chart \
-  --namespace harness \
-  --create-namespace \
-  -f /path/to/existing-harness-values.yaml
-```
+### 4. Resulting Resources and Scope
 
-Helm stores supplied values in the release metadata. Do not pass a complete
-production Harness values file to the custom release when it contains
-credentials or other confidential data. In that case, create a minimal
-environment-specific routing values file containing only the existing paths
-listed above, and pass that file instead.
+After the files and values are merged, the existing custom chart can render:
 
-Additional environment-specific custom values can be supplied with another
-`-f` argument. Helm applies files from left to right, so place intentional
-custom overrides last.
+- One `ListenerSet` with the Harness HTTPS listener
+- A second listener when Looker is enabled
+- One narrowly scoped `ReferenceGrant` for the TLS Secret names
+- The `harness-ui` HTTPRoute when NextGen UI is enabled without Classic UI
+- The Looker HTTPRoute when Looker is enabled
+- The optional `CiliumNetworkPolicy` when explicitly enabled
 
-### 4. Keep the Post-Renderer with the Harness Release
+The copied files do not install or modify the centralized Gateway and do not
+copy the generic Harness service routes. Those generic HTTPRoutes remain owned
+by the native Harness Gateway API output. Any post-rendering required by the
+Harness Platform release remains part of that separate Harness deployment
+workflow; no post-renderer script needs to be copied into the existing custom
+chart.
 
-Copying the templates creates the ListenerSet, ReferenceGrant, and the few
-special-case HTTPRoutes. The generic HTTPRoutes are still rendered by Harness
-Platform 0.42.1 and require the included post-renderer to complete their
-ListenerSet ParentRefs.
+### 5. Optional Render Verification
 
-The post-renderer is deployment tooling, not a Helm template:
-
-- For Helm 3, retain `scripts/listenerset-parentref-post-renderer`, keep it
-  executable, and pass its path to the Harness Platform Helm command.
-- For Helm 4, retain `scripts/plugin.yaml` and
-  `scripts/listenerset-parentref-post-renderer` in the same directory, install
-  that directory as the plugin, and use the plugin name shown below.
-
-Apply the post-renderer to the separate Harness Platform release, not to the
-custom-manifests release. It intentionally validates every rendered
-`gateway.networking.k8s.io/v1` HTTPRoute and will fail closed when unrelated
-HTTPRoutes do not target `harness-listeners/harness-https`.
-
-If Harness Platform is already embedded as a dependency in the existing
-custom chart, do not use the post-renderer unchanged when that combined render
-also contains unrelated HTTPRoutes. Keep the releases separate, or adapt and
-retest the post-renderer for the combined resource set.
-
-### 5. Render and Verify the Combined Custom Chart
-
-Render the custom chart with the same namespace and Harness values before
-installing it:
+The chart's existing delivery process is responsible for applying the
+resources. As an optional local check, render the custom chart with the target
+namespace and its environment values:
 
 ```sh
 helm template custom-manifests /path/to/custom-chart \
   --namespace harness \
-  -f /path/to/existing-harness-values.yaml \
+  -f /path/to/custom-environment-values.yaml \
   > /tmp/custom-manifests.yaml
 ```
 
 With the matching CRDs installed in a test cluster, a server-side dry run can
-also validate the generated resources:
+validate the generated file without installing a separate overlay release:
 
 ```sh
 kubectl apply --dry-run=server -f /tmp/custom-manifests.yaml
@@ -255,6 +236,9 @@ When redistributing a chart containing these copied templates, retain the
 Apache-2.0 license and attribution from this repository.
 
 ## Rendering and Installation
+
+This section applies only when using this repository as a standalone overlay
+chart. Skip it when the files have been copied into an existing custom chart.
 
 First, install the overlay in the same namespace as Harness:
 
