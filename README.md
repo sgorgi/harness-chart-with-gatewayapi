@@ -17,17 +17,18 @@ When Harness provides a suitable native Gateway API implementation, this entire 
 
 ## Repository layout
 
-The expected repository layout is:
+A typical repository layout is:
 
 ```text
 .
-├── Chart.yaml
-├── values-base.yaml
-├── values-nonprod.yaml
-├── values-prod.yaml
 ├── charts/
 │   └── harness/
 │       └── Chart.yaml
+├── configuration/
+│   └── harness/
+│       ├── common.yaml
+│       ├── nonprod.yaml
+│       └── prod.yaml
 └── gateway-api/
     ├── Chart.yaml
     ├── README.md
@@ -46,6 +47,10 @@ The expected repository layout is:
 ```
 
 The `gateway-api/` directory is a standalone Helm chart. It is deliberately not placed below `charts/`, because `charts/` remains reserved for the upstream Harness chart and its dependencies.
+
+Harness values files do not need to be located beside the script or below the repository root. Pass each file explicitly with `-f` or `--values`. Relative paths are resolved from the directory where the script is executed. Absolute paths are also supported.
+
+Values files use normal Helm precedence. The first file provides the lowest precedence, and every later file may override values from earlier files.
 
 ## What is generated
 
@@ -78,7 +83,7 @@ Although Envoy ultimately reads the certificate, Gateway API authorization is ba
 The following commands are required:
 
 - Helm 3
-- Bash
+- Bash 4 or newer
 - [mikefarah/yq](https://github.com/mikefarah/yq) version 4
 
 The cluster must already contain:
@@ -99,18 +104,16 @@ spec:
 
 ## Generate nonprod resources
 
-Run:
+Pass every Harness values file in the same order you would pass them to `helm template`:
 
 ```bash
-./gateway-api/render.sh nonprod
+./gateway-api/render.sh nonprod \
+  --values ../shared/harness-common.yaml \
+  --values /srv/config/harness/nonprod.yaml \
+  --values ./developer-overrides.yaml
 ```
 
-The script renders Harness with:
-
-```text
-values-base.yaml
-values-nonprod.yaml
-```
+The paths do not need to be below `gateway-api/`. The final file has the highest precedence.
 
 It creates:
 
@@ -123,17 +126,13 @@ gateway-api/generated/nonprod/gateway-api.yaml
 
 ## Generate prod resources
 
-Run:
+Use the production values chain:
 
 ```bash
-./gateway-api/render.sh prod
-```
-
-The script renders Harness with:
-
-```text
-values-base.yaml
-values-prod.yaml
+./gateway-api/render.sh prod \
+  -f /srv/config/harness/common.yaml \
+  -f /srv/config/harness/region-eu.yaml \
+  -f /srv/config/harness/prod.yaml
 ```
 
 It creates the corresponding files below:
@@ -143,6 +142,32 @@ gateway-api/generated/prod/
 ```
 
 Hostnames, TLS Secret names, paths, backend Services, and backend ports are therefore derived separately for each environment.
+
+## Script options
+
+```text
+Usage:
+  ./gateway-api/render.sh <nonprod|prod> [options]
+
+Harness values files:
+  -f, --values FILE          May be repeated. Later files override earlier files.
+
+Other options:
+      --harness-chart PATH   Override the unpacked Harness chart location.
+      --gateway-values FILE  Override the Gateway transition values file.
+      --output-dir PATH      Override the generated output directory.
+      --release NAME         Override the Helm release name used for rendering.
+      --namespace NAME       Override the Harness namespace.
+```
+
+When no `-f` or `--values` option is supplied, the script retains its original compatibility behavior and attempts to use:
+
+```text
+<repository-root>/values-base.yaml
+<repository-root>/values-<environment>.yaml
+```
+
+Explicit values arguments are recommended because they make the render inputs visible and work independently of repository layout.
 
 ## Inspect the result
 
@@ -184,7 +209,9 @@ kubectl describe httproute -n harness
 Generate the environment-specific discovered values first:
 
 ```bash
-./gateway-api/render.sh nonprod
+./gateway-api/render.sh nonprod \
+  -f /srv/config/harness/common.yaml \
+  -f /srv/config/harness/nonprod.yaml
 ```
 
 Then install or upgrade the transition chart:
@@ -289,7 +316,7 @@ gatewayTransition:
 
 For every Harness chart or values update:
 
-1. Run the generator for `nonprod` and `prod`.
+1. Run the generator for `nonprod` and `prod` with the exact values-file chain used by each Harness release.
 2. Review changes in `discovered-values.yaml`.
 3. Review the final `gateway-api.yaml` output.
 4. Verify ListenerSet and HTTPRoute status in a nonprod cluster.
