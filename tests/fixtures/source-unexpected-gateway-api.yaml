@@ -1,9 +1,0 @@
-global:
-  ingress:
-    enabled: false
-  gatewayAPI:
-    enabled: true
-
-adversarial:
-  unexpectedGatewayAPIResource:
-    enabled: true

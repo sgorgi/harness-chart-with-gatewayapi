@@ -1,5 +1,0 @@
-apiVersion: v2
-name: harness-ingress-converter
-description: Internal renderer for the Harness Gateway API routing inventory
-type: application
-version: 0.1.0

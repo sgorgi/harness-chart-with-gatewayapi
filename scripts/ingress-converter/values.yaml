@@ -1,7 +1,0 @@
-sourceManifest: ""
-sourceReleaseName: ""
-sourceNamespace: ""
-sourceKubeVersion: ""
-sourceHelmVersion: ""
-sourceApiVersions: []
-allowImplementationSpecificRegexOrdering: false

@@ -1,64 +1,35 @@
-{{- if .Values.harnessGatewayOverlay.enabled }}
-{{- $inventory := include "harness-gateway-api.inventory" . | fromJson }}
-{{- range $route := get $inventory "routes" }}
+{{- if .Values.gatewayTransition.enabled }}
+{{- range $route := .Values.gatewayTransition.discoveredRoutes }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: {{ $route.name | quote }}
-  namespace: {{ $.Release.Namespace | quote }}
+  name: {{ include "harness-gateway-transition.routeName" $route }}
+  namespace: {{ $route.namespace }}
   labels:
-    {{- include "harness-gateway-api.labels" $ | nindent 4 }}
-  annotations:
-    harness-gateway-api.io/source-ingress: {{ $route.sourceIngress | quote }}
-    harness-gateway-api.io/routing-contract-sha256: {{ dig "source" "routingContractSha256" "" $inventory | quote }}
+    {{- include "harness-gateway-transition.labels" $ | nindent 4 }}
+    gateway.harness.io/source-ingress: {{ $route.source.ingressName | quote }}
 spec:
   parentRefs:
     - group: gateway.networking.k8s.io
       kind: ListenerSet
-      name: {{ include "harness-gateway-api.listenerSetName" $ | quote }}
-      namespace: {{ $.Release.Namespace | quote }}
-      sectionName: {{ $route.sectionName | quote }}
+      name: {{ $.Values.gatewayTransition.listenerSet.name }}
+      namespace: {{ $.Values.gatewayTransition.listenerSet.namespace }}
+      sectionName: {{ include "harness-gateway-transition.listenerName" $route }}
   hostnames:
     - {{ $route.hostname | quote }}
   rules:
     {{- range $rule := $route.rules }}
     - matches:
         - path:
-            type: {{ $rule.path.type | quote }}
-            value: {{ $rule.path.value | quote }}
-      {{- with $rule.filters }}
-      filters:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with $rule.timeouts }}
-      timeouts:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+            type: {{ include "harness-gateway-transition.pathType" $rule.pathType }}
+            value: {{ $rule.path | quote }}
       backendRefs:
         - group: ""
           kind: Service
-          name: {{ $rule.backend.name | quote }}
-          port: {{ $rule.backend.port }}
+          name: {{ $rule.backend.serviceName }}
+          port: {{ $rule.backend.servicePort }}
+          weight: 1
     {{- end }}
-{{- end }}
-{{- range $httpRouteFilter := get $inventory "httpRouteFilters" }}
----
-apiVersion: gateway.envoyproxy.io/v1alpha1
-kind: HTTPRouteFilter
-metadata:
-  name: {{ $httpRouteFilter.name | quote }}
-  namespace: {{ $.Release.Namespace | quote }}
-  labels:
-    {{- include "harness-gateway-api.labels" $ | nindent 4 }}
-  annotations:
-    harness-gateway-api.io/routing-contract-sha256: {{ dig "source" "routingContractSha256" "" $inventory | quote }}
-spec:
-  urlRewrite:
-    path:
-      type: ReplaceRegexMatch
-      replaceRegexMatch:
-        pattern: {{ $httpRouteFilter.pattern | quote }}
-        substitution: {{ $httpRouteFilter.substitution | quote }}
 {{- end }}
 {{- end }}

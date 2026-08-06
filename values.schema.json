@@ -1,30 +1,86 @@
 {
-  "$schema": "https://json-schema.org/draft-07/schema#",
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
+  "required": ["gatewayTransition"],
   "properties": {
-    "harnessGatewayOverlay": {
+    "gatewayTransition": {
       "type": "object",
-      "additionalProperties": false,
-      "required": ["enabled", "ciliumNetworkPolicy"],
+      "required": ["enabled", "gateway", "listenerSet", "referenceGrant", "discoveredRoutes"],
       "properties": {
-        "enabled": {
-          "type": "boolean",
-          "description": "Render generated Gateway API resources and their stable supporting resources."
-        },
-        "ciliumNetworkPolicy": {
+        "enabled": { "type": "boolean" },
+        "mode": { "const": "shadow" },
+        "gateway": {
           "type": "object",
-          "additionalProperties": false,
+          "required": ["name", "namespace"],
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "namespace": { "type": "string", "minLength": 1 }
+          }
+        },
+        "listenerSet": {
+          "type": "object",
+          "required": ["name", "namespace", "port", "allowedRoutesNamespacesFrom"],
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "namespace": { "type": "string", "minLength": 1 },
+            "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+            "allowedRoutesNamespacesFrom": { "enum": ["All", "Same", "Selector"] }
+          }
+        },
+        "referenceGrant": {
+          "type": "object",
           "required": ["enabled"],
           "properties": {
-            "enabled": {
-              "type": "boolean",
-              "description": "Render the additive Envoy-to-Harness Cilium allow rule."
+            "enabled": { "type": "boolean" }
+          }
+        },
+        "discoveredRoutes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["source", "namespace", "hostname", "tls", "rules"],
+            "properties": {
+              "source": {
+                "type": "object",
+                "required": ["ingressName"],
+                "properties": {
+                  "ingressName": { "type": "string", "minLength": 1 }
+                }
+              },
+              "namespace": { "type": "string", "minLength": 1 },
+              "hostname": { "type": "string", "minLength": 1 },
+              "tls": {
+                "type": "object",
+                "required": ["secretName", "secretNamespace"],
+                "properties": {
+                  "secretName": { "type": "string", "minLength": 1 },
+                  "secretNamespace": { "type": "string", "minLength": 1 }
+                }
+              },
+              "rules": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": ["path", "pathType", "backend"],
+                  "properties": {
+                    "path": { "type": "string", "minLength": 1 },
+                    "pathType": { "enum": ["Prefix", "Exact"] },
+                    "backend": {
+                      "type": "object",
+                      "required": ["serviceName", "servicePort"],
+                      "properties": {
+                        "serviceName": { "type": "string", "minLength": 1 },
+                        "servicePort": { "type": "integer", "minimum": 1, "maximum": 65535 }
+                      }
+                    }
+                  }
+                }
+              }
             }
           }
         }
       }
     }
-  },
-  "required": ["harnessGatewayOverlay"],
-  "additionalProperties": true
+  }
 }

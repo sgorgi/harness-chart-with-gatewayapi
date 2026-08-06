@@ -1,19 +1,6 @@
 apiVersion: v2
-name: harness-gateway-api
-description: Unofficial Ingress-derived Gateway API overlay for Harness Platform
+name: harness-gateway-transition
+description: Temporary Gateway API resources generated from rendered Harness Ingress manifests
 type: application
-version: 0.3.0
-appVersion: "0.3.0"
-home: https://github.com/sgorgi/harness-chart-with-gatewayapi
-sources:
-  - https://github.com/sgorgi/harness-chart-with-gatewayapi
-keywords:
-  - harness
-  - gateway-api
-  - envoy-gateway
-  - listenerset
-annotations:
-  artifacthub.io/license: Apache-2.0
-  harness.io/tested-platform-version: "0.42.1"
-  gateway.envoyproxy.io/tested-version: "1.8.3"
-  gateway.networking.k8s.io/tested-version: "1.5.1"
+version: 0.1.0
+appVersion: "transition"

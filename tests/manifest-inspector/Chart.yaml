@@ -1,5 +1,0 @@
-apiVersion: v2
-name: manifest-inspector
-description: Test-only Helm chart that emits stable TSV records for rendered manifests
-type: application
-version: 0.1.0

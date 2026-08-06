@@ -1,3 +1,0 @@
-{{- if .Values.harnessGatewayOverlay.enabled -}}
-{{- $_ := include "harness-gateway-api.inventory" . -}}
-{{- end -}}

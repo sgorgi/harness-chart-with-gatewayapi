@@ -1,0 +1,6 @@
+# Environment-specific Gateway API settings belong here.
+# Hostnames, TLS secrets, paths, services, and ports are discovered from the
+# Harness manifests rendered with values-base.yaml and values-nonprod.yaml.
+gatewayTransition:
+  enabled: true
+  mode: shadow
