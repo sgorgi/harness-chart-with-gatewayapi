@@ -1,0 +1,4 @@
+# Merge this block into values-ut.yaml.
+gatewayAPI:
+  environment: ut
+  enabled: true

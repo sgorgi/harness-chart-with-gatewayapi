@@ -1,6 +1,0 @@
-apiVersion: v2
-name: harness-gateway-transition
-description: Temporary Gateway API resources generated from rendered Harness Ingress manifests
-type: application
-version: 0.1.0
-appVersion: "transition"

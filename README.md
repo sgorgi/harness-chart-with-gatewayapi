@@ -1,337 +1,370 @@
-# Harness Gateway API transition
+# company-harness Gateway API generator
 
-This directory contains a temporary and removable Gateway API implementation for Harness releases that still create Kubernetes `Ingress` resources.
+This package implements a repository-local Gateway API transition for the
+`company-harness` umbrella chart.
 
-The implementation intentionally does not read Harness subchart values. Instead, it renders the upstream Harness chart and derives the required routing information from the resulting Kubernetes `Ingress` and `Service` objects.
+It does not create a separate Helm chart and it does not inspect Harness chart
+internals. Instead, it renders the complete umbrella chart with the values used
+by each environment, discovers the active Kubernetes `Ingress` and `Service`
+objects, and generates deterministic Helm templates below `templates/`.
 
-When Harness provides a suitable native Gateway API implementation, this entire directory and its separate Helm release can be removed.
+The existing Ingress resources remain active. This provides shadow mode until
+the generated Gateway API resources have been validated and traffic is moved.
 
-## Design goals
-
-- Keep `charts/` reserved for the unpacked upstream Harness chart.
-- Keep all temporary Gateway API code in one removable directory.
-- Support different `nonprod` and `prod` Harness values.
-- Avoid coupling to Harness subchart names, templates, helpers, or internal values.
-- Keep the existing Ingress resources active during the transition.
-- Fail explicitly when an Ingress cannot be converted without changing its semantics.
-
-## Repository layout
-
-A typical repository layout is:
+## Expected repository layout
 
 ```text
-.
+company-harness/
+├── Chart.yaml
+├── values-base.yaml
+├── values-prod.yaml
+├── values-ut.yaml
 ├── charts/
 │   └── harness/
 │       └── Chart.yaml
-├── configuration/
-│   └── harness/
-│       ├── common.yaml
-│       ├── nonprod.yaml
-│       └── prod.yaml
-└── gateway-api/
-    ├── Chart.yaml
-    ├── README.md
-    ├── render.sh
-    ├── values.yaml
-    ├── values.schema.json
-    ├── environments/
-    │   ├── nonprod.yaml
-    │   └── prod.yaml
-    ├── generated/
-    └── templates/
-        ├── _helpers.tpl
-        ├── httproutes.yaml
-        ├── listenerset.yaml
-        └── referencegrants.yaml
+├── templates/
+└── scripts/
+    └── generate_gateway_api.sh
 ```
 
-The `gateway-api/` directory is a standalone Helm chart. It is deliberately not placed below `charts/`, because `charts/` remains reserved for the upstream Harness chart and its dependencies.
+Copy `scripts/generate_gateway_api.sh` into the repository and merge the
+supplied values snippets into the existing values files.
 
-Harness values files do not need to be located beside the script or below the repository root. Pass each file explicitly with `-f` or `--values`. Relative paths are resolved from the directory where the script is executed. Absolute paths are also supported.
+## Requirements
 
-Values files use normal Helm precedence. The first file provides the lowest precedence, and every later file may override values from earlier files.
+The generator is intended for Linux and requires:
 
-## What is generated
+* Bash 4 or newer
+* Helm 3
+* mikefarah/yq v4
+* GNU `sha256sum`, `install`, `cmp`, `diff`, `sed` and `sort`
 
-For every hostname found in the rendered Harness Ingress resources, the transition chart creates:
+Python and `jq` are not required.
 
-- one HTTPS listener in a `ListenerSet`
-- one `HTTPRoute` per source Ingress and hostname
-- one restricted `ReferenceGrant` per TLS Secret
+## Values configuration
 
-The existing Harness Ingress resources are not changed or removed. This is the shadow mode behavior.
+Merge the supplied snippets into:
 
-## Namespace model
+```text
+values-base.yaml
+values-ut.yaml
+values-prod.yaml
+```
 
-The default configuration uses:
+The base configuration keeps the parent `Gateway` and generated `ListenerSet`
+in `envoy-gateway-apps`. Generated `HTTPRoute` objects and TLS Secrets remain in
+the Harness release namespace.
+
+Because the ListenerSet references TLS Secrets in another namespace, the
+generator also creates a restricted `ReferenceGrant` in the Harness namespace.
+Only the discovered Secret names are authorized.
+
+## Generate both environments
+
+Run from `company-harness/`:
+
+```bash
+./scripts/generate_gateway_api.sh all \
+  --release harness \
+  --namespace harness
+```
+
+The release name and namespace must match the real Helm release. They can affect
+rendered resource names and namespaces.
+
+The script performs renders equivalent to:
+
+```bash
+helm template harness . \
+  --namespace harness \
+  --values values-base.yaml \
+  --values values-ut.yaml \
+  --set gatewayAPI.enabled=false
+
+helm template harness . \
+  --namespace harness \
+  --values values-base.yaml \
+  --values values-prod.yaml \
+  --set gatewayAPI.enabled=false
+```
+
+`gatewayAPI.enabled=false` prevents previously generated Gateway API templates
+from taking part in discovery. It does not disable the upstream Harness Ingress
+resources.
+
+## Generated files
+
+The committed outputs are:
+
+```text
+templates/generated-gateway-api-ut.yaml
+templates/generated-gateway-api-prod.yaml
+```
+
+Diagnostic outputs are also written:
+
+```text
+.generated/gateway-api/ut/active-ingresses.yaml
+.generated/gateway-api/ut/active-services.yaml
+.generated/gateway-api/ut/ingress-annotations.json
+
+.generated/gateway-api/prod/active-ingresses.yaml
+.generated/gateway-api/prod/active-services.yaml
+.generated/gateway-api/prod/ingress-annotations.json
+```
+
+Both generated files remain below `templates/`, but each is guarded by
+`gatewayAPI.environment`. A UT release therefore renders only the UT resources,
+and a production release renders only the production resources.
+
+## Generated resources
+
+For each environment, the generator creates:
+
+* one `ListenerSet`
+* one HTTPS listener per discovered TLS hostname
+* one `HTTPRoute` per source Ingress and hostname
+* one restricted `ReferenceGrant` containing the discovered TLS Secret names
+* optional port 80 listeners and HTTP to HTTPS redirect routes
+
+The mapping is derived from the rendered Kubernetes objects:
+
+| Ingress property | Generated property |
+|---|---|
+| Rule hostname | Listener and HTTPRoute hostname |
+| TLS Secret | ListenerSet `certificateRefs` |
+| `Prefix` path | HTTPRoute `PathPrefix` |
+| `Exact` path | HTTPRoute `Exact` |
+| Backend Service | HTTPRoute `backendRefs.name` |
+| Numeric Service port | HTTPRoute `backendRefs.port` |
+| Named Service port | Resolved from the rendered Service |
+
+## Cross-namespace model
+
+The default values create this relationship:
 
 | Resource | Namespace |
 |---|---|
-| Parent `Gateway` | `envoy-gateway-apps` |
-| `ListenerSet` | `envoy-gateway-apps` |
-| `HTTPRoute` | Harness namespace discovered from the Ingress |
-| TLS `Secret` | Harness namespace discovered from the Ingress |
-| `ReferenceGrant` | Same Harness namespace as the TLS Secret |
+| Parent Gateway | `envoy-gateway-apps` |
+| ListenerSet | `envoy-gateway-apps` |
+| HTTPRoutes | Harness release namespace |
+| TLS Secrets | Harness release namespace |
+| ReferenceGrant | Harness release namespace |
 
-The TLS certificate reference is defined on the `ListenerSet`. Therefore, the `ReferenceGrant` authorizes the `ListenerSet` kind from `envoy-gateway-apps` to reference the named Secret in the Harness namespace.
-
-Although Envoy ultimately reads the certificate, Gateway API authorization is based on the Kubernetes resource that contains `certificateRefs`. In this implementation that resource is the `ListenerSet`, not the parent `Gateway`.
-
-## Prerequisites
-
-The following commands are required:
-
-- Helm 3
-- Bash 4 or newer
-- [mikefarah/yq](https://github.com/mikefarah/yq) version 4
-
-The cluster must already contain:
-
-- Gateway API CRDs with `ListenerSet` support
-- Envoy Gateway with ListenerSet support
-- a parent `Gateway` named `apps-gateway` in `envoy-gateway-apps`
-- `spec.allowedListeners` on the parent Gateway configured to accept the ListenerSet
-
-Example parent Gateway setting:
+The ListenerSet uses an explicit Secret namespace:
 
 ```yaml
-spec:
-  allowedListeners:
-    namespaces:
-      from: All
+certificateRefs:
+  - group: ""
+    kind: Secret
+    name: discovered-secret-name
+    namespace: harness
 ```
 
-## Generate nonprod resources
+The generated `ReferenceGrant` allows the ListenerSet namespace to reference
+only the listed Secret names.
 
-Pass every Harness values file in the same order you would pass them to `helm template`:
+The parent Gateway must permit ListenerSets according to your existing Gateway
+configuration. The ListenerSet permits HTTPRoutes from all namespaces so that
+routes in the Harness namespace can attach to it.
 
-```bash
-./gateway-api/render.sh nonprod \
-  --values ../shared/harness-common.yaml \
-  --values /srv/config/harness/nonprod.yaml \
-  --values ./developer-overrides.yaml
+## Named Service ports
+
+An Ingress can use a named backend port:
+
+```yaml
+backend:
+  service:
+    name: harness-manager
+    port:
+      name: http
 ```
 
-The paths do not need to be below `gateway-api/`. The final file has the highest precedence.
+Gateway API requires a numeric backend port. The generator resolves `http`
+against the `Service` objects from the same umbrella-chart render and writes the
+result:
 
-It creates:
+```yaml
+backendRefs:
+  - name: harness-manager
+    port: 9090
+```
+
+Generation fails when the named port cannot be resolved uniquely.
+
+## Intentional validation failures
+
+The generator fails rather than silently changing routing behavior when it
+finds:
+
+* an Ingress rule without a hostname
+* a hostname without an explicitly matching TLS Secret
+* `ImplementationSpecific` or missing path types
+* a non-Service backend
+* a missing or unresolved Service port
+* conflicting TLS Secrets for the same hostname
+* an Ingress outside the Helm release namespace
+
+These failures indicate that the source Ingress cannot be translated safely by
+the generic generator.
+
+## Ingress annotations
+
+Controller-specific annotations are not automatically translated. Examples
+include:
 
 ```text
-gateway-api/generated/nonprod/harness-rendered.yaml
-gateway-api/generated/nonprod/discovered-values.yaml
-gateway-api/generated/nonprod/ingress-annotations.yaml
-gateway-api/generated/nonprod/gateway-api.yaml
+nginx.ingress.kubernetes.io/rewrite-target
+nginx.ingress.kubernetes.io/proxy-read-timeout
+nginx.ingress.kubernetes.io/proxy-body-size
+nginx.ingress.kubernetes.io/backend-protocol
 ```
 
-## Generate prod resources
+Rewrites, timeouts, authentication, body limits, backend protocols and similar
+behavior may require HTTPRoute filters or Envoy Gateway policies.
 
-Use the production values chain:
+The generator:
+
+* records these annotations in
+  `.generated/gateway-api/<environment>/ingress-annotations.json`
+* embeds them as comments in the generated template
+* includes annotation value changes in generated-file diffs
+
+After every relevant annotation has been handled explicitly, enable strict CI
+validation:
 
 ```bash
-./gateway-api/render.sh prod \
-  -f /srv/config/harness/common.yaml \
-  -f /srv/config/harness/region-eu.yaml \
-  -f /srv/config/harness/prod.yaml
+./scripts/generate_gateway_api.sh all \
+  --release harness \
+  --namespace harness \
+  --check \
+  --strict-annotations
 ```
 
-It creates the corresponding files below:
+## Upgrade and GitOps workflow
 
-```text
-gateway-api/generated/prod/
-```
+Commit the two generated templates below `templates/`.
 
-Hostnames, TLS Secret names, paths, backend Services, and backend ports are therefore derived separately for each environment.
+Rerun generation after every change to:
 
-## Script options
+* `charts/harness`
+* `Chart.yaml`
+* `values-base.yaml`
+* `values-ut.yaml`
+* `values-prod.yaml`
+* custom templates that can affect Ingress or Service output
 
-```text
-Usage:
-  ./gateway-api/render.sh <nonprod|prod> [options]
-
-Harness values files:
-  -f, --values FILE          May be repeated. Later files override earlier files.
-
-Other options:
-      --harness-chart PATH   Override the unpacked Harness chart location.
-      --gateway-values FILE  Override the Gateway transition values file.
-      --output-dir PATH      Override the generated output directory.
-      --release NAME         Override the Helm release name used for rendering.
-      --namespace NAME       Override the Harness namespace.
-```
-
-When no `-f` or `--values` option is supplied, the script retains its original compatibility behavior and attempts to use:
-
-```text
-<repository-root>/values-base.yaml
-<repository-root>/values-<environment>.yaml
-```
-
-Explicit values arguments are recommended because they make the render inputs visible and work independently of repository layout.
-
-## Inspect the result
-
-Review the discovered model first:
+Generate and review changes:
 
 ```bash
-cat gateway-api/generated/nonprod/discovered-values.yaml
+./scripts/generate_gateway_api.sh all \
+  --release harness \
+  --namespace harness
+
+git diff -- templates/generated-gateway-api-ut.yaml \
+  templates/generated-gateway-api-prod.yaml
 ```
 
-Review the Ingress annotations that are not converted automatically:
+CI should verify that the committed output is current:
 
 ```bash
-cat gateway-api/generated/nonprod/ingress-annotations.yaml
+./scripts/generate_gateway_api.sh all \
+  --release harness \
+  --namespace harness \
+  --check
 ```
 
-Then inspect the final Gateway API resources:
+`--check` does not modify files. It prints a unified diff and exits with status
+1 when the committed templates no longer match the active Ingress model.
+
+This pre-generation step is required because one Helm template cannot inspect
+the already rendered manifests of a dependency during the same Helm render.
+
+## Final umbrella-chart render
+
+Render UT after generation:
 
 ```bash
-cat gateway-api/generated/nonprod/gateway-api.yaml
+helm template harness . \
+  --namespace harness \
+  --values values-base.yaml \
+  --values values-ut.yaml \
+  > rendered-ut.yaml
 ```
 
-Useful resource checks after deployment:
+Inspect only the generated transition resources:
+
+```bash
+yq eval 'select(
+  .kind == "ListenerSet" or
+  .kind == "HTTPRoute" or
+  .kind == "ReferenceGrant"
+)' rendered-ut.yaml
+```
+
+Validate against a cluster containing the required CRDs:
+
+```bash
+kubectl apply --server-side --dry-run=server -f rendered-ut.yaml
+```
+
+## Shadow-mode validation
+
+Keep the existing Ingress resources enabled while testing.
+
+After deployment:
 
 ```bash
 kubectl get listenerset -n envoy-gateway-apps
 kubectl get httproute -n harness
 kubectl get referencegrant -n harness
-```
 
-Inspect status conditions:
-
-```bash
 kubectl describe listenerset harness -n envoy-gateway-apps
-kubectl describe httproute -n harness
+kubectl get httproute -n harness -o yaml
 ```
 
-## Deploy as a separate Helm release
-
-Generate the environment-specific discovered values first:
+Test each hostname directly against the Envoy address before changing DNS:
 
 ```bash
-./gateway-api/render.sh nonprod \
-  -f /srv/config/harness/common.yaml \
-  -f /srv/config/harness/nonprod.yaml
-```
-
-Then install or upgrade the transition chart:
-
-```bash
-helm upgrade --install harness-gateway-transition ./gateway-api \
-  --namespace harness \
-  --values ./gateway-api/environments/nonprod.yaml \
-  --values ./gateway-api/generated/nonprod/discovered-values.yaml
-```
-
-The Helm release namespace may be `harness`, while the rendered resources explicitly target both the Harness namespace and `envoy-gateway-apps`.
-
-The identity running Helm must have permission to manage resources in both namespaces.
-
-## GitOps usage
-
-Flux does not execute this repository-specific discovery script as part of normal Helm rendering. Use one of these approaches:
-
-1. Generate `discovered-values.yaml` in CI and commit it before Flux reconciles the transition Helm release.
-2. Generate and validate the final manifests in CI, then deploy those manifests through a separate GitOps path.
-
-For a temporary transition chart, committing the generated discovered values is usually the simpler option. CI should rerun the script after every Harness chart or values update and fail when the committed file changes unexpectedly.
-
-Do not treat `harness-rendered.yaml` as a source file. It is only diagnostic output and can be excluded from Git.
-
-## Shadow mode testing
-
-The transition chart does not modify DNS and does not remove the existing Ingress resources.
-
-Test Envoy directly before changing DNS:
-
-```bash
-curl --resolve harness.example.com:443:<ENVOY_IP> \
+curl --resolve harness.example.com:443:ENVOY_IP \
   https://harness.example.com/
 ```
 
-Repeat the test for every generated hostname, including the Looker hostname when enabled.
+Do not disable the old Ingress resources until:
 
-## Supported Ingress features
+* ListenerSet and HTTPRoute status conditions are accepted
+* TLS certificate references are resolved
+* controller-specific behavior has been reproduced
+* direct traffic tests pass for every hostname and important path
 
-The generator supports:
+## Network policies
 
-- `networking.k8s.io/v1` Ingress resources
-- host-based routing
-- `Prefix` paths
-- `Exact` paths
-- numeric backend Service ports
-- named backend Service ports, resolved from rendered Service objects
-- TLS Secrets explicitly associated with each hostname
+The generator intentionally does not create a `CiliumNetworkPolicy`. Ingress
+objects describe host and Service routing, but they do not fully describe the
+destination Pod selectors, resolved endpoint target ports, or legitimate
+east-west callers needed for a safe network policy.
 
-The generator intentionally fails for:
+Keep the Cilium policy as an explicit custom template and values model. Do not
+derive it solely from the generated HTTPRoute backend list.
 
-- `ImplementationSpecific` paths
-- rules without hostnames
-- hosts without an explicitly matching TLS entry
-- non-Service backends
-- missing or unresolved backend ports
+## Makefile integration
 
-Failing is intentional. Silently converting unsupported behavior could produce a reachable route with different routing semantics.
+The package includes `Makefile.gateway-api`. Either include its targets in your
+existing Makefile or copy the targets directly.
 
-## Ingress annotations
-
-The script does not translate controller-specific Ingress annotations.
-
-Before switching traffic, compare any behavior-affecting annotations with the resulting Envoy Gateway configuration. Typical examples include:
-
-- request or response size limits
-- backend protocol selection
-- timeouts
-- redirects
-- rewrites
-- authentication
-- custom NGINX snippets
-
-These features should be implemented explicitly with Gateway API fields or Envoy Gateway policies rather than copied automatically.
-
-## Environment-specific Gateway settings
-
-Most environment differences are discovered automatically from the rendered Harness manifests.
-
-Use these files only for Gateway infrastructure differences:
-
-```text
-gateway-api/environments/nonprod.yaml
-gateway-api/environments/prod.yaml
+```bash
+make -f Makefile.gateway-api gateway-api-generate
+make -f Makefile.gateway-api gateway-api-check
+make -f Makefile.gateway-api gateway-api-check-strict
 ```
 
-For example:
+## Removal
 
-```yaml
-gatewayTransition:
-  gateway:
-    name: apps-gateway
-    namespace: envoy-gateway-apps
-  listenerSet:
-    name: harness
-    namespace: envoy-gateway-apps
-```
+When Harness provides a suitable native Gateway API implementation:
 
-## Upgrade workflow
+1. Render and test the native resources in parallel.
+2. Compare routes, listeners, TLS references and policies.
+3. Remove the generated templates and generator script.
+4. Remove the `gatewayAPI` values blocks.
 
-For every Harness chart or values update:
-
-1. Run the generator for `nonprod` and `prod` with the exact values-file chain used by each Harness release.
-2. Review changes in `discovered-values.yaml`.
-3. Review the final `gateway-api.yaml` output.
-4. Verify ListenerSet and HTTPRoute status in a nonprod cluster.
-5. Test all hostnames directly against the Envoy address.
-6. Promote the same process to prod.
-
-A change in generated hostnames, paths, Services, ports, or TLS Secrets should be treated as an application routing change, even when the Harness chart upgrade documentation does not mention Gateway API.
-
-## Removal when Harness supports Gateway API
-
-When Harness provides the required native resources:
-
-1. Render and test the native Harness Gateway API implementation in parallel.
-2. Compare its routes, listeners, TLS references, and policies with this transition implementation.
-3. Disable or uninstall the `harness-gateway-transition` Helm release.
-4. Delete the `gateway-api/` directory.
-
-No files below `charts/harness` need to be modified or restored.
+No file below `charts/harness` is modified by this implementation.
