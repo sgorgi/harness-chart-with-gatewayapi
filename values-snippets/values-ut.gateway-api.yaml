@@ -1,4 +1,4 @@
-# Merge this block into values-ut.yaml.
+# Merge this block into whichever values chain represents UT.
 gatewayAPI:
   environment: ut
   enabled: true

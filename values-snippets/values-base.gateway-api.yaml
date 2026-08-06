@@ -1,7 +1,5 @@
-# Merge this block into values-base.yaml.
+# Merge this block into the base or common values file used by each release.
 gatewayAPI:
-  # Generated Gateway API templates remain inactive unless an environment
-  # values file explicitly enables them.
   enabled: false
   environment: ""
 
@@ -9,18 +7,13 @@ gatewayAPI:
     name: apps-gateway
     namespace: envoy-gateway-apps
 
-  # The ListenerSet is kept with the shared Gateway. HTTPRoutes and TLS Secrets
-  # remain in the Harness release namespace.
   listenerSet:
     name: harness
     namespace: envoy-gateway-apps
 
-  # This grant is created in the Harness namespace and permits only the
-  # generated ListenerSet to reference the discovered TLS Secrets.
   referenceGrant:
     name: harness-gateway-tls
 
-  # Optional port 80 listeners and HTTP to HTTPS redirect routes.
   httpRedirect:
     enabled: false
     statusCode: 301

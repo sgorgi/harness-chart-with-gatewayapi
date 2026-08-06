@@ -1,15 +1,14 @@
 # company-harness Gateway API generator
 
-This package implements a repository-local Gateway API transition for the
-`company-harness` umbrella chart.
+This package generates Gateway API Helm templates from the Kubernetes `Ingress`
+and `Service` objects rendered by the complete `company-harness` umbrella chart.
 
-It does not create a separate Helm chart and it does not inspect Harness chart
-internals. Instead, it renders the complete umbrella chart with the values used
-by each environment, discovers the active Kubernetes `Ingress` and `Service`
-objects, and generates deterministic Helm templates below `templates/`.
+It does not inspect the internals of `charts/harness`. It runs `helm template`
+with the values files supplied on the command line, discovers the active source
+objects, and writes deterministic templates below `templates/`.
 
-The existing Ingress resources remain active. This provides shadow mode until
-the generated Gateway API resources have been validated and traffic is moved.
+The existing Ingress resources remain active. This allows the generated Gateway
+API resources to be tested in shadow mode before traffic is switched.
 
 ## Expected repository layout
 
@@ -27,8 +26,9 @@ company-harness/
     └── generate_gateway_api.sh
 ```
 
-Copy `scripts/generate_gateway_api.sh` into the repository and merge the
-supplied values snippets into the existing values files.
+The values files do not need to use these names and do not need to be in the
+chart directory. Every values file is supplied explicitly with `-f` or
+`--values`.
 
 ## Requirements
 
@@ -37,95 +37,169 @@ The generator is intended for Linux and requires:
 * Bash 4 or newer
 * Helm 3
 * mikefarah/yq v4
-* GNU `sha256sum`, `install`, `cmp`, `diff`, `sed` and `sort`
+* GNU `sha256sum`, `install`, `cmp`, `diff`, `grep`, `sed` and `sort`
 
 Python and `jq` are not required.
 
-## Values configuration
+## Gateway API values
 
-Merge the supplied snippets into:
+Only the Gateway API infrastructure settings need to be maintained manually.
+Merge the supplied base snippet into an appropriate values file:
+
+```yaml
+gatewayAPI:
+  enabled: false
+  environment: ""
+
+  gateway:
+    name: apps-gateway
+    namespace: envoy-gateway-apps
+
+  listenerSet:
+    name: harness
+    namespace: envoy-gateway-apps
+
+  referenceGrant:
+    name: harness-gateway-tls
+
+  httpRedirect:
+    enabled: false
+    statusCode: 301
+```
+
+Each release values chain must set the environment to the profile used when the
+template was generated. For example:
+
+```yaml
+# UT values
+gatewayAPI:
+  environment: ut
+  enabled: true
+```
+
+```yaml
+# Production values
+gatewayAPI:
+  environment: prod
+  enabled: true
+```
+
+The generator does not modify these values files.
+
+## Values-file precedence
+
+Pass the values files in the same order used for the real Helm release:
+
+```bash
+./scripts/generate_gateway_api.sh ut \
+  -f values-base.yaml \
+  -f values-ut.yaml
+```
+
+The long form is equivalent:
+
+```bash
+./scripts/generate_gateway_api.sh prod \
+  --values /srv/harness/common.yaml \
+  --values /srv/harness/region-eu.yaml \
+  --values /srv/harness/prod.yaml
+```
+
+Later files have higher precedence, matching normal Helm behavior. Relative
+values paths are resolved from the directory in which the script is executed.
+Absolute paths are supported.
+
+The script must be run once per profile. This is intentional because UT and
+production can use different values chains and different precedence:
+
+```bash
+./scripts/generate_gateway_api.sh ut \
+  -f values-base.yaml \
+  -f values-ut.yaml
+
+./scripts/generate_gateway_api.sh prod \
+  -f values-base.yaml \
+  -f values-prod.yaml
+```
+
+During discovery, the script appends:
 
 ```text
-values-base.yaml
-values-ut.yaml
-values-prod.yaml
+--set gatewayAPI.enabled=false
 ```
 
-The base configuration keeps the parent `Gateway` and generated `ListenerSet`
-in `envoy-gateway-apps`. Generated `HTTPRoute` objects and TLS Secrets remain in
-the Harness release namespace.
+This prevents an existing generated template from participating in the source
+render. It does not disable the upstream Harness Ingress resources. All supplied
+values files otherwise retain their normal order and precedence.
 
-Because the ListenerSet references TLS Secrets in another namespace, the
-generator also creates a restricted `ReferenceGrant` in the Harness namespace.
-Only the discovered Secret names are authorized.
+## Command-line interface
 
-## Generate both environments
-
-Run from `company-harness/`:
-
-```bash
-./scripts/generate_gateway_api.sh all \
-  --release harness \
-  --namespace harness
+```text
+./scripts/generate_gateway_api.sh <profile> [options] [-f FILE ...]
 ```
 
-The release name and namespace must match the real Helm release. They can affect
-rendered resource names and namespaces.
+Useful options:
 
-The script performs renders equivalent to:
-
-```bash
-helm template harness . \
-  --namespace harness \
-  --values values-base.yaml \
-  --values values-ut.yaml \
-  --set gatewayAPI.enabled=false
-
-helm template harness . \
-  --namespace harness \
-  --values values-base.yaml \
-  --values values-prod.yaml \
-  --set gatewayAPI.enabled=false
+```text
+-f, --values FILE
+--chart-dir PATH
+--release NAME
+--namespace NAME
+--output-dir PATH
+--diagnostics-dir PATH
+--implementation-specific auto|regex|prefix|fail
+--check
+--strict-annotations
 ```
 
-`gatewayAPI.enabled=false` prevents previously generated Gateway API templates
-from taking part in discovery. It does not disable the upstream Harness Ingress
-resources.
+The profile is normally `ut` or `prod`, but any lowercase DNS-label-style name
+can be used.
 
 ## Generated files
 
-The committed outputs are:
+For profile `ut`, the committed output is:
 
 ```text
 templates/generated-gateway-api-ut.yaml
+```
+
+For profile `prod`:
+
+```text
 templates/generated-gateway-api-prod.yaml
 ```
 
-Diagnostic outputs are also written:
+Diagnostic output is written below:
 
 ```text
-.generated/gateway-api/ut/active-ingresses.yaml
-.generated/gateway-api/ut/active-services.yaml
-.generated/gateway-api/ut/ingress-annotations.json
-
-.generated/gateway-api/prod/active-ingresses.yaml
-.generated/gateway-api/prod/active-services.yaml
-.generated/gateway-api/prod/ingress-annotations.json
+.generated/gateway-api/<profile>/active-ingresses.yaml
+.generated/gateway-api/<profile>/active-services.yaml
+.generated/gateway-api/<profile>/ingress-annotations.json
+.generated/gateway-api/<profile>/values-files.txt
 ```
 
-Both generated files remain below `templates/`, but each is guarded by
-`gatewayAPI.environment`. A UT release therefore renders only the UT resources,
-and a production release renders only the production resources.
+Each generated template is guarded by:
+
+```gotemplate
+{{- if and
+      (default false .Values.gatewayAPI.enabled)
+      (eq (default "" .Values.gatewayAPI.environment) "ut")
+}}
+```
+
+Both generated files can therefore remain under `templates/`. Only the file for
+the selected environment is rendered by Helm.
 
 ## Generated resources
 
-For each environment, the generator creates:
+The generator creates:
 
 * one `ListenerSet`
 * one HTTPS listener per discovered TLS hostname
 * one `HTTPRoute` per source Ingress and hostname
-* one restricted `ReferenceGrant` containing the discovered TLS Secret names
-* optional port 80 listeners and HTTP to HTTPS redirect routes
+* one restricted `ReferenceGrant` for the discovered TLS Secrets
+* `HTTPRouteFilter` resources for supported regex rewrites
+* optional port 80 listeners and HTTP-to-HTTPS redirect routes
 
 The mapping is derived from the rendered Kubernetes objects:
 
@@ -135,11 +209,14 @@ The mapping is derived from the rendered Kubernetes objects:
 | TLS Secret | ListenerSet `certificateRefs` |
 | `Prefix` path | HTTPRoute `PathPrefix` |
 | `Exact` path | HTTPRoute `Exact` |
+| Regex path | HTTPRoute `RegularExpression` |
 | Backend Service | HTTPRoute `backendRefs.name` |
 | Numeric Service port | HTTPRoute `backendRefs.port` |
 | Named Service port | Resolved from the rendered Service |
+| Fixed rewrite target | Core `URLRewrite` with `ReplaceFullPath` |
+| Capture-group rewrite | Envoy Gateway `HTTPRouteFilter` |
 
-## Cross-namespace model
+## Cross-namespace TLS model
 
 The default values create this relationship:
 
@@ -151,26 +228,15 @@ The default values create this relationship:
 | TLS Secrets | Harness release namespace |
 | ReferenceGrant | Harness release namespace |
 
-The ListenerSet uses an explicit Secret namespace:
+The ListenerSet explicitly references each TLS Secret in the Harness namespace.
+The generated `ReferenceGrant` authorizes only those discovered Secret names.
 
-```yaml
-certificateRefs:
-  - group: ""
-    kind: Secret
-    name: discovered-secret-name
-    namespace: harness
-```
-
-The generated `ReferenceGrant` allows the ListenerSet namespace to reference
-only the listed Secret names.
-
-The parent Gateway must permit ListenerSets according to your existing Gateway
-configuration. The ListenerSet permits HTTPRoutes from all namespaces so that
-routes in the Harness namespace can attach to it.
+The parent Gateway must permit ListenerSets from the ListenerSet namespace. The
+ListenerSet permits the generated HTTPRoutes from the Harness namespace.
 
 ## Named Service ports
 
-An Ingress can use a named backend port:
+An Ingress may reference a named Service port:
 
 ```yaml
 backend:
@@ -180,9 +246,8 @@ backend:
       name: http
 ```
 
-Gateway API requires a numeric backend port. The generator resolves `http`
-against the `Service` objects from the same umbrella-chart render and writes the
-result:
+Gateway API requires the Service port number. The generator resolves the name
+against the Services from the same umbrella-chart render:
 
 ```yaml
 backendRefs:
@@ -190,181 +255,245 @@ backendRefs:
     port: 9090
 ```
 
-Generation fails when the named port cannot be resolved uniquely.
+Generation fails when the port cannot be resolved uniquely.
 
-## Intentional validation failures
+## ImplementationSpecific paths
 
-The generator fails rather than silently changing routing behavior when it
-finds:
+Kubernetes deliberately leaves `ImplementationSpecific` path behavior to the
+Ingress controller. It cannot always be translated safely without controller
+context.
 
-* an Ingress rule without a hostname
-* a hostname without an explicitly matching TLS Secret
-* `ImplementationSpecific` or missing path types
-* a non-Service backend
-* a missing or unresolved Service port
-* conflicting TLS Secrets for the same hostname
-* an Ingress outside the Helm release namespace
-
-These failures indicate that the source Ingress cannot be translated safely by
-the generic generator.
-
-## Ingress annotations
-
-Controller-specific annotations are not automatically translated. Examples
-include:
+The default mode is:
 
 ```text
+--implementation-specific auto
+```
+
+For ingress-nginx, the generator performs a host-wide pre-scan:
+
+* `nginx.ingress.kubernetes.io/use-regex: "true"` enables regex mode.
+* `nginx.ingress.kubernetes.io/rewrite-target` also enables regex mode.
+* ingress-nginx applies that regex mode to all paths for the same hostname.
+* an `ImplementationSpecific` path containing obvious regex characters is
+  treated as a regex even when the annotation is absent.
+* a literal `ImplementationSpecific` path is treated as `PathPrefix`.
+
+Other modes are available:
+
+| Mode | Behavior |
+|---|---|
+| `auto` | Infer regex behavior, otherwise use `PathPrefix` |
+| `regex` | Treat every `ImplementationSpecific` path as regex |
+| `prefix` | Use `PathPrefix` unless host-wide ingress-nginx regex mode is explicit |
+| `fail` | Reject every `ImplementationSpecific` path |
+
+### Example: Harness authz path
+
+This Ingress path:
+
+```yaml
+path: /authz(/|$)(.*)
+pathType: ImplementationSpecific
+```
+
+is generated as a case-insensitive RE2-compatible match:
+
+```yaml
+matches:
+  - path:
+      type: RegularExpression
+      value: "(?i)^/authz(/|$)(.*)"
+```
+
+The `(?i)` flag preserves ingress-nginx case-insensitive regex behavior. The `^`
+anchor preserves its start-of-path behavior.
+
+## nginx rewrite-target conversion
+
+The following common ingress-nginx combination is translated automatically:
+
+```yaml
+metadata:
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /authz(/|$)(.*)
+            pathType: ImplementationSpecific
+```
+
+The generator creates an Envoy Gateway `HTTPRouteFilter` similar to:
+
+```yaml
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: HTTPRouteFilter
+spec:
+  urlRewrite:
+    path:
+      type: ReplaceRegexMatch
+      replaceRegexMatch:
+        pattern: "(?i)^/authz(/|$)(.*)"
+        substitution: "/\\2"
+```
+
+and references it from the matching HTTPRoute rule.
+
+Numeric NGINX capture references such as `$1`, `$2` and `$3` are converted to
+Envoy substitutions such as `\1`, `\2` and `\3`. Unsupported `$` expressions
+cause generation to fail rather than produce a different route.
+
+A rewrite target without capture references is translated to the core Gateway
+API `URLRewrite` filter with `ReplaceFullPath`.
+
+## Regex limitations
+
+Ingress-nginx path expressions and Envoy Gateway regex features both use
+RE2-compatible syntax in the supported migration path. Even so, regex route
+precedence is implementation-specific in Gateway API, especially when multiple
+HTTPRoutes for the same hostname contain overlapping regular expressions.
+
+Review and test overlapping paths carefully. The generator orders paths by
+source-path length within each generated HTTPRoute, matching ingress-nginx's
+longer-path-first approach as closely as possible.
+
+Do not disable the existing Ingress until the generated routes have an accepted
+status and direct traffic tests confirm matching and rewrite behavior.
+
+## Other Ingress annotations
+
+The generator translates these ingress-nginx annotations:
+
+```text
+nginx.ingress.kubernetes.io/use-regex
 nginx.ingress.kubernetes.io/rewrite-target
+```
+
+Other controller-specific annotations are not translated automatically.
+Examples include:
+
+```text
 nginx.ingress.kubernetes.io/proxy-read-timeout
 nginx.ingress.kubernetes.io/proxy-body-size
 nginx.ingress.kubernetes.io/backend-protocol
+nginx.ingress.kubernetes.io/auth-url
 ```
 
-Rewrites, timeouts, authentication, body limits, backend protocols and similar
-behavior may require HTTPRoute filters or Envoy Gateway policies.
+The diagnostic annotation report separates translated and untranslated values:
 
-The generator:
+```json
+{
+  "access-control-services|example.company.ch": {
+    "translated": {
+      "nginx.ingress.kubernetes.io/use-regex": "true",
+      "nginx.ingress.kubernetes.io/rewrite-target": "/$2"
+    },
+    "untranslated": {}
+  }
+}
+```
 
-* records these annotations in
-  `.generated/gateway-api/<environment>/ingress-annotations.json`
-* embeds them as comments in the generated template
-* includes annotation value changes in generated-file diffs
-
-After every relevant annotation has been handled explicitly, enable strict CI
-validation:
+Use strict validation after all remaining annotations have been migrated:
 
 ```bash
-./scripts/generate_gateway_api.sh all \
-  --release harness \
-  --namespace harness \
+./scripts/generate_gateway_api.sh ut \
+  -f values-base.yaml \
+  -f values-ut.yaml \
   --check \
   --strict-annotations
 ```
 
+Translated `use-regex` and `rewrite-target` annotations do not cause strict mode
+to fail. Other controller-specific annotations do.
+
 ## Upgrade and GitOps workflow
 
-Commit the two generated templates below `templates/`.
-
-Rerun generation after every change to:
-
-* `charts/harness`
-* `Chart.yaml`
-* `values-base.yaml`
-* `values-ut.yaml`
-* `values-prod.yaml`
-* custom templates that can affect Ingress or Service output
-
-Generate and review changes:
+Generate and commit one template per values chain:
 
 ```bash
-./scripts/generate_gateway_api.sh all \
-  --release harness \
-  --namespace harness
+./scripts/generate_gateway_api.sh ut \
+  -f values-base.yaml \
+  -f values-ut.yaml
 
-git diff -- templates/generated-gateway-api-ut.yaml \
-  templates/generated-gateway-api-prod.yaml
+git diff -- templates/generated-gateway-api-ut.yaml
 ```
 
-CI should verify that the committed output is current:
+After every relevant Harness chart or values change, CI should rerun the exact
+same command with `--check`:
 
 ```bash
-./scripts/generate_gateway_api.sh all \
-  --release harness \
-  --namespace harness \
+./scripts/generate_gateway_api.sh ut \
+  -f values-base.yaml \
+  -f values-ut.yaml \
   --check
 ```
 
-`--check` does not modify files. It prints a unified diff and exits with status
-1 when the committed templates no longer match the active Ingress model.
+`--check` does not modify the committed template. It prints a unified diff and
+exits with status 1 when the active Ingress model no longer matches the generated
+Gateway API template.
 
 This pre-generation step is required because one Helm template cannot inspect
 the already rendered manifests of a dependency during the same Helm render.
 
 ## Final umbrella-chart render
 
-Render UT after generation:
+After generation, render the umbrella chart with the same values chain:
 
 ```bash
 helm template harness . \
   --namespace harness \
-  --values values-base.yaml \
-  --values values-ut.yaml \
+  -f values-base.yaml \
+  -f values-ut.yaml \
   > rendered-ut.yaml
 ```
 
-Inspect only the generated transition resources:
+Inspect the transition resources:
 
 ```bash
 yq eval 'select(
   .kind == "ListenerSet" or
   .kind == "HTTPRoute" or
+  .kind == "HTTPRouteFilter" or
   .kind == "ReferenceGrant"
 )' rendered-ut.yaml
 ```
 
-Validate against a cluster containing the required CRDs:
+Validate against a cluster containing the Gateway API and Envoy Gateway CRDs:
 
 ```bash
 kubectl apply --server-side --dry-run=server -f rendered-ut.yaml
 ```
 
-## Shadow-mode validation
-
-Keep the existing Ingress resources enabled while testing.
-
 After deployment:
 
 ```bash
 kubectl get listenerset -n envoy-gateway-apps
-kubectl get httproute -n harness
+kubectl get httproute,httproutefilter -n harness
 kubectl get referencegrant -n harness
-
-kubectl describe listenerset harness -n envoy-gateway-apps
-kubectl get httproute -n harness -o yaml
+kubectl describe httproute -n harness
 ```
 
-Test each hostname directly against the Envoy address before changing DNS:
+## Shadow-mode traffic test
+
+Keep the existing Ingress resources enabled. Test Envoy directly before changing
+DNS:
 
 ```bash
-curl --resolve harness.example.com:443:ENVOY_IP \
+curl --resolve harness.example.com:443:<ENVOY_IP> \
   https://harness.example.com/
 ```
 
-Do not disable the old Ingress resources until:
-
-* ListenerSet and HTTPRoute status conditions are accepted
-* TLS certificate references are resolved
-* controller-specific behavior has been reproduced
-* direct traffic tests pass for every hostname and important path
-
-## Network policies
-
-The generator intentionally does not create a `CiliumNetworkPolicy`. Ingress
-objects describe host and Service routing, but they do not fully describe the
-destination Pod selectors, resolved endpoint target ports, or legitimate
-east-west callers needed for a safe network policy.
-
-Keep the Cilium policy as an explicit custom template and values model. Do not
-derive it solely from the generated HTTPRoute backend list.
-
-## Makefile integration
-
-The package includes `Makefile.gateway-api`. Either include its targets in your
-existing Makefile or copy the targets directly.
+For the regex example, test all relevant shapes:
 
 ```bash
-make -f Makefile.gateway-api gateway-api-generate
-make -f Makefile.gateway-api gateway-api-check
-make -f Makefile.gateway-api gateway-api-check-strict
+curl --resolve example.company.ch:443:<ENVOY_IP> \
+  https://example.company.ch/authz
+
+curl --resolve example.company.ch:443:<ENVOY_IP> \
+  https://example.company.ch/authz/
+
+curl --resolve example.company.ch:443:<ENVOY_IP> \
+  https://example.company.ch/authz/example
 ```
-
-## Removal
-
-When Harness provides a suitable native Gateway API implementation:
-
-1. Render and test the native resources in parallel.
-2. Compare routes, listeners, TLS references and policies.
-3. Remove the generated templates and generator script.
-4. Remove the `gatewayAPI` values blocks.
-
-No file below `charts/harness` is modified by this implementation.

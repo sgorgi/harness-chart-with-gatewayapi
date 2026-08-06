@@ -1,7 +1,6 @@
-# Merge this block into values-prod.yaml.
+# Merge this block into whichever values chain represents production.
 gatewayAPI:
   environment: prod
 
-  # Enable only after the production output has been reviewed and tested in
-  # shadow mode while the existing Ingress resources remain active.
+  # Enable after production shadow-mode validation.
   enabled: false
