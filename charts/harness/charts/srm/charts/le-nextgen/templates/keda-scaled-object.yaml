@@ -1,1 +1,0 @@
-{{- include "harnesscommon.keda.renderScaledObject" (dict "ctx" . "kind" "Deployment" "nameOverride" "le-nextgen" "targetRefNameOverride" "le-nextgen") }}

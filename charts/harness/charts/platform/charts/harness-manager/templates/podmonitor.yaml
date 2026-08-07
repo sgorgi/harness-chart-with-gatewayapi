@@ -1,3 +1,0 @@
-{{ include "harnesscommon.monitoring.podMonitor" (dict "name" "harness-manager" "ctx" $ "label" "app.kubernetes.io/name") }}
----
-{{ include "harnesscommon.monitoring.podMonitor" (dict "name" "harness-manager-iterator" "podMonitorName" "harness-manager-iterator" "ctx" $ "label" "app.kubernetes.io/name") }}

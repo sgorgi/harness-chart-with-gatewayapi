@@ -1,2 +1,0 @@
-DOCKER_FILE_PATH: iac-server/docker/Dockerfile-build
-HELM_CHART_SOURCE_DIRECTORY: iac-server/charts/iac-server

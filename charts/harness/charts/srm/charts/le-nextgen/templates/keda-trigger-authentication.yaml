@@ -1,3 +1,0 @@
-{{- include "harnesscommon.keda.renderTriggerAuthentication" (dict "ctx" .) }}
----
-{{- include "harnesscommon.keda.renderTriggerAuthentication" (dict "ctx" . "nameOverride" "le-nextgen-srm-keda-auth" "configPath" .Values.srm) }}

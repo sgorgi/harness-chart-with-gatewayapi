@@ -1,2 +1,0 @@
-{{- $name := include "ff-server.name" . -}}
-{{ include "harnesscommon.monitoring.podMonitor" (dict "name" $name "ctx" $ "label" "app.kubernetes.io/name") }}
