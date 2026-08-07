@@ -477,8 +477,8 @@ jq --null-input \
       | ($ingress_rule.host) as $host
       | ($ingress_rule.http.paths // []) as $paths
       | range(0; ($paths | length); $max_rules) as $start
-      | ([$start + $max_rules, ($paths | length)] | min) as $end
-      | ($paths | to_entries | .[$start:$end]) as $path_entries
+      | ([$start + $max_rules, ($paths | length)] | min) as $stop
+      | ($paths | to_entries | .[$start:$stop]) as $path_entries
       | (
           ([
             if ($ingress_rules | length) > 1 then "host-\($host_index + 1)" else empty end,
