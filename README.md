@@ -99,6 +99,13 @@ dependency alias:
 
 Apply the equivalent change to `runtimeValues.tlsSecretNamePath`.
 
+The generator uses the rendered Ingresses as its source of truth; the runtime
+paths do not need to be explicitly present in every input layer during
+generation. They must resolve in the final umbrella-chart Helm context after all
+chart defaults and environment values have been merged. If Helm reports that a
+runtime path does not resolve, inspect the consuming chart's effective values
+and adjust these dotted paths to its dependency alias.
+
 ### 3. Keep environment values in the environment files
 
 UT and production keep their existing Harness values. For this fixture they are:

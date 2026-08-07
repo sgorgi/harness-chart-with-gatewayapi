@@ -14,6 +14,9 @@ Parent Gateway: gateway-system/shared-gateway
 ListenerSet: harness-prod/harness
 Route namespaces: harness-prod
 
+Runtime hosts values path: harness.global.ingress.hosts
+Runtime TLS Secret values path: harness.global.ingress.tls.secretName
+
 Warnings:
 - harness-prod/policy-mgmt-0: annotation nginx.ingress.kubernetes.io/proxy-send-timeout was not translated
 

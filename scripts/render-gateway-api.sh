@@ -160,6 +160,14 @@ for required_path in \
   }
 done
 
+for runtime_path_key in hostsPath tlsSecretNamePath; do
+  runtime_path_value=$(config_value ".gatewayApi.runtimeValues.${runtime_path_key}")
+  if [[ ! "$runtime_path_value" =~ ^[A-Za-z0-9_-]+([.][A-Za-z0-9_-]+)*$ ]]; then
+    echo "error: gatewayApi.runtimeValues.${runtime_path_key} must be a dotted Helm values path, got: $runtime_path_value" >&2
+    exit 1
+  fi
+done
+
 provider=$(config_value '.gatewayApi.provider')
 [[ "$(config_value '.gatewayApi.enabled')" == "true" ]] || {
   echo "error: gatewayApi.enabled must be true" >&2
@@ -664,9 +672,6 @@ jq \
   def path_parts($path):
     $path | split(".") | map(select(length > 0));
 
-  def value_at_path($object; $path):
-    $object | getpath(path_parts($path));
-
   def helm_index_arguments($path):
     path_parts($path) | map(@json) | join(" ");
 
@@ -682,25 +687,23 @@ jq \
   | ($values[0]) as $config
   | ($config.gatewayApi.runtimeValues.hostsPath) as $hosts_path
   | ($config.gatewayApi.runtimeValues.tlsSecretNamePath) as $tls_secret_path
-  | (value_at_path($config; $hosts_path)) as $configured_hosts
-  | (value_at_path($config; $tls_secret_path)) as $configured_tls_secret
   | ($result.context.sourceHosts) as $source_hosts
   | ($result.context.sourceTlsSecrets) as $source_tls_secrets
-  | if ($configured_hosts | type) != "array" or ($configured_hosts | length) == 0 then
-      error("gatewayApi.runtimeValues.hostsPath must resolve to a non-empty list")
+  | if ($source_hosts | length) == 0 then
+      error("the rendered source Ingresses do not contain a hostname")
     else . end
-  | if $source_hosts != $configured_hosts then
-      error("the runtime hosts path does not match the hosts rendered into the source Ingresses")
-    else . end
-  | if ($source_tls_secrets | length) != 1 or $source_tls_secrets[0] != $configured_tls_secret then
-      error("the runtime TLS Secret path must resolve to the single Secret rendered into the source Ingresses")
+  | if ($source_tls_secrets | length) != 1 then
+      error("the rendered source Ingresses must refer to exactly one TLS Secret")
     else . end
   | ("{{ .Release.Namespace }}") as $release_namespace
   | ("{{ required \"gatewayApi.listenerSet.name is required\" .Values.gatewayApi.listenerSet.name }}") as $listener_set_name
   | ("{{ required \"gatewayApi.referenceGrant.name is required\" .Values.gatewayApi.referenceGrant.name }}") as $reference_grant_name
   | ("{{ required \"gatewayApi.parentGateway.name is required\" .Values.gatewayApi.parentGateway.name }}") as $parent_gateway_name
   | ("{{ required \"gatewayApi.parentGateway.namespace is required\" .Values.gatewayApi.parentGateway.namespace }}") as $parent_gateway_namespace
-  | (helm_required_value($tls_secret_path; "the Harness TLS Secret value is required")) as $tls_secret_name
+  | (helm_required_value(
+      $tls_secret_path;
+      "gatewayApi.runtimeValues.tlsSecretNamePath (\($tls_secret_path)) must resolve to the Harness TLS Secret name"
+    )) as $tls_secret_name
   | ($result.listenerSets[0].spec.listeners) as $source_listeners
   | ([
       range(0; ($source_listeners | length)) as $listener_index
@@ -720,7 +723,11 @@ jq \
       else
         ($source_hosts | index($source_host)) as $host_index
         | if $host_index == null then error("cannot map generated hostname to its runtime values index")
-          else helm_required_list_item($hosts_path; "the Harness ingress hosts list is required"; $host_index)
+          else helm_required_list_item(
+            $hosts_path;
+            "gatewayApi.runtimeValues.hostsPath (\($hosts_path)) must resolve to the Harness ingress hosts list";
+            $host_index
+          )
           end
       end;
   def runtime_listener_name($source_name):
@@ -819,7 +826,7 @@ runtime_hosts_arguments=$(jq --null-input --raw-output --arg path "$runtime_host
 source_host_count=$(jq '.context.sourceHosts | length' "$result_json")
 {
   # shellcheck disable=SC2016 # The dollar sign belongs to the generated Helm template.
-  printf '{{- $harnessGatewayHosts := required "the Harness ingress hosts list is required" (index .Values %s) -}}\n' "$runtime_hosts_arguments"
+  printf '{{- $harnessGatewayHosts := required "gatewayApi.runtimeValues.hostsPath (%s) must resolve to the Harness ingress hosts list" (index .Values %s) -}}\n' "$runtime_hosts_path" "$runtime_hosts_arguments"
   # shellcheck disable=SC2016 # The dollar sign belongs to the generated Helm template.
   printf '{{- if ne (len $harnessGatewayHosts) %s -}}\n' "$source_host_count"
   printf '{{- fail "Harness ingress host count changed; rerun scripts/render-gateway-api.sh" -}}\n'
@@ -866,6 +873,8 @@ filter_count=$(jq '.filters | length' "$result_json")
   printf 'Parent Gateway: %s\n' "$(jq --raw-output '.context.parentGateway' "$result_json")"
   printf 'ListenerSet: %s\n' "$(jq --raw-output '.context.listenerSet' "$result_json")"
   printf 'Route namespaces: %s\n\n' "$(jq --raw-output '.context.routeNamespaces | join(", ")' "$result_json")"
+  printf 'Runtime hosts values path: %s\n' "$(config_value '.gatewayApi.runtimeValues.hostsPath')"
+  printf 'Runtime TLS Secret values path: %s\n\n' "$(config_value '.gatewayApi.runtimeValues.tlsSecretNamePath')"
   printf '%s\n' 'Warnings:'
   if [[ $(jq '.warnings | length' "$result_json") -eq 0 ]]; then
     printf '%s\n' '- none'
