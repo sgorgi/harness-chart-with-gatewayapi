@@ -1,0 +1,34 @@
+{{- $enabled := and .Values.global.monitoring.enabled (eq .Values.global.monitoring.managedPlatform "google") -}}
+{{- if $enabled -}}
+{{- $localMonitoring := default (dict) ((pluck "monitoring" .Values) | first) -}}
+{{- $globalMonitoring := default (dict) ((pluck "monitoring" .Values.global) | first) -}}
+{{- $monitoring := (mergeOverwrite $globalMonitoring $localMonitoring) -}}
+{{- $port := default 8889 ((pluck "port" $monitoring) | first) -}}
+{{- $path := default "/metrics" ((pluck "path" $monitoring) | first) -}}
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: {{ .Chart.Name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Chart.Name }}
+  endpoints:
+    # Access Control main container metrics
+    - port: {{ $port }}
+      interval: 120s
+      path: {{ $path | quote }}
+    {{- if eq .Values.config.ENABLE_SPICE_DB_SERVER "true" }}
+    # SpiceDB sidecar container metrics
+    - port: {{ .Values.spicedb.metrics.port }}
+      interval: {{ .Values.spicedb.metrics.interval }}
+      path: {{ .Values.spicedb.metrics.path | quote }}
+    {{- end }}
+    {{- if .Values.shadowTap.enabled }}
+    # Envoy sidecar metrics
+    - port: {{ .Values.shadowTap.envoy.adminPort }}
+      interval: {{ .Values.shadowTap.envoy.metrics.interval }}
+      path: {{ .Values.shadowTap.envoy.metrics.path | quote }}
+    {{- end }}
+{{- end }}

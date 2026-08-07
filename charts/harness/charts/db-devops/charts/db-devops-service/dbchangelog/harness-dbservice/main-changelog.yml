@@ -1,0 +1,6 @@
+databaseChangeLog:
+  - include:
+      file: baseline/baseline-changelog.yml
+  - includeAll:
+      path: changelogs/
+      errorIfMissingOrEmpty: false

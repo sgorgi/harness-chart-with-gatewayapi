@@ -1,0 +1,9 @@
+apiVersion: v2
+appVersion: 0.42.1
+dependencies:
+- name: harness
+  repository: file://charts/harness
+  version: 0.42.1
+name: company-harness
+type: application
+version: 1.60.10

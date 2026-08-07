@@ -1,0 +1,363 @@
+databaseChangeLog:
+- changeSet:
+    id: baseline-collections-dbSnapshotFile
+    author: Harness
+    changes:
+    - createCollection:
+        collectionName: dbSnapshotFile
+        options: '{}'
+    - createIndex:
+        collectionName: dbSnapshotFile
+        keys: '{"accountId": 1, "parentId": 1, "instanceID": 1, "snapshotId": 1}'
+        options: '{"name": "Unique_DbSnapshotFile", "unique": true}'
+        unique: true
+- changeSet:
+    id: baseline-collections-flywaymigrationstate
+    author: Harness
+    changes:
+    - createCollection:
+        collectionName: flywaymigrationstate
+        options: '{}'
+    - createIndex:
+        collectionName: flywaymigrationstate
+        keys: '{"accountId": 1, "parentId": 1, "schemaId": 1, "instanceId": 1, "flywayScriptEntityId":
+          1}'
+        options: '{"name": "Unique_Flyway_Migration_State", "unique": true}'
+        unique: true
+    - createIndex:
+        collectionName: flywaymigrationstate
+        keys: '{"accountId": 1, "schemaId": 1, "instanceId": 1, "version": 1}'
+        options: '{"name": "flyway_accountId_schemaId_instanceId_version_idx"}'
+    - createIndex:
+        collectionName: flywaymigrationstate
+        keys: '{"accountId": 1, "parentId": 1, "schemaId": 1, "instanceId": 1, "status":
+          1, "updatedAt": 1}'
+        options: '{"name": "accountId_parentId_schemaId_instanceId_status_updatedAt_idx"}'
+- changeSet:
+    id: baseline-collections-executionConfig
+    author: Harness
+    changes:
+    - createCollection:
+        collectionName: executionConfig
+        options: '{}'
+    - createIndex:
+        collectionName: executionConfig
+        keys: '{"accountId": 1}'
+        options: '{"name": "Unique_Config", "unique": true}'
+        unique: true
+- changeSet:
+    id: baseline-collections-dbinstance
+    author: Harness
+    changes:
+    - createCollection:
+        collectionName: dbinstance
+        options: '{}'
+    - createIndex:
+        collectionName: dbinstance
+        keys: '{"accountId": 1, "schemaId": 1, "identifier": 1}'
+        options: '{"name": "Unique_Instance", "unique": true}'
+        unique: true
+    - createIndex:
+        collectionName: dbinstance
+        keys: '{"accountId": 1, "parentId": 1, "schemaIdentifier": 1, "identifier":
+          1}'
+        options: '{"name": "account_parentId_schemaIdentifier_identifier_idx"}'
+    - createIndex:
+        collectionName: dbinstance
+        keys: '{"accountId": 1, "schemaId": 1, "created": 1}'
+        options: '{"name": "account_schemaId_created_idx"}'
+- changeSet:
+    id: baseline-collections-outbox
+    author: Harness
+    changes:
+    - createCollection:
+        collectionName: outbox
+        options: '{}'
+    - createIndex:
+        collectionName: outbox
+        keys: '{"blocked": 1, "createdAt": 1, "nextUnblockAttemptAt": 1}'
+        options: '{"name": "blocked_createdAt_nextUnblockAttemptAt_outbox_Idx"}'
+- changeSet:
+    id: baseline-collections-changeauthoringexecutionevents
+    author: Harness
+    changes:
+    - createCollection:
+        collectionName: changeauthoringexecutionevents
+        options: '{}'
+    - createIndex:
+        collectionName: changeauthoringexecutionevents
+        keys: '{"accountId": 1, "parentId": 1, "schemaId": 1, "conversationId": 1,
+          "pipelineExecutionId": 1}'
+        options: '{"name": "Unique_ChangeAuthoringExecutionEvent", "unique": true}'
+        unique: true
+    - createIndex:
+        collectionName: changeauthoringexecutionevents
+        keys: '{"processingStatus": 1, "createdAt": 1}'
+        options: '{"name": "Idx_ProcessingStatus_CreatedAt"}'
+- changeSet:
+    id: baseline-collections-flywaycommandexecutionhistory
+    author: Harness
+    changes:
+    - createCollection:
+        collectionName: flywaycommandexecutionhistory
+        options: '{}'
+    - createIndex:
+        collectionName: flywaycommandexecutionhistory
+        keys: '{"accountId": 1, "parentId": 1, "instanceId": 1, "command": 1, "pipelineExecutionId":
+          1, "stageExecutionId": 1, "version": 1}'
+        options: '{"name": "Unique_Flyway_Command_Execution_History", "unique": true}'
+        unique: true
+    - createIndex:
+        collectionName: flywaycommandexecutionhistory
+        keys: '{"accountId": 1, "parentId": 1, "instanceId": 1, "command": 1, "status":
+          1, "rolledBack": 1, "version": 1}'
+        options: '{"name": "accountId_parentId_instanceId_command_status_rolledBack_version_idx"}'
+    - createIndex:
+        collectionName: flywaycommandexecutionhistory
+        keys: '{"accountId": 1, "parentId": 1, "instanceId": 1, "pipelineExecutionId":
+          1, "stageExecutionId": 1, "command": 1, "status": 1, "updatedAt": 1}'
+        options: '{"name": "accountId_parentId_instanceId_pipelineExecutionId_stageExecutionId_command_status_updatedAt_idx"}'
+    - createIndex:
+        collectionName: flywaycommandexecutionhistory
+        keys: '{"accountId": 1, "parentId": 1, "instanceId": 1, "command": 1, "status":
+          1, "rolledBack": 1, "deployedAt": 1, "updatedAt": -1}'
+        options: '{"name": "flyway_accountId_parentId_instanceId_command_status_rolledBack_deployedAt_updatedAt_idx"}'
+- changeSet:
+    id: baseline-collections-dbschema
+    author: Harness
+    changes:
+    - createCollection:
+        collectionName: dbschema
+        options: '{}'
+    - createIndex:
+        collectionName: dbschema
+        keys: '{"accountId": 1, "parentId": 1, "identifier": 1}'
+        options: '{"name": "Unique_Schema", "unique": true}'
+        unique: true
+    - createIndex:
+        collectionName: dbschema
+        keys: '{"accountId": 1, "parentId": 1, "created": 1}'
+        options: '{"name": "accountId_parentId_created_idx"}'
+    - createIndex:
+        collectionName: dbschema
+        keys: '{"accountId": 1, "created": 1}'
+        options: '{"name": "accountId_created_idx"}'
+    - createIndex:
+        collectionName: dbschema
+        keys: '{"accountId": 1, "parentId": 1, "created": 1, "migrationType": 1, "identifier":
+          1}'
+        options: '{"name": "accountId_parentId_created_migrationType_idf_idx"}'
+- changeSet:
+    id: baseline-collections-parsedLog
+    author: Harness
+    changes:
+    - createCollection:
+        collectionName: parsedLog
+        options: '{}'
+- changeSet:
+    id: baseline-collections-migrationscriptmetadata
+    author: Harness
+    changes:
+    - createCollection:
+        collectionName: migrationscriptmetadata
+        options: '{}'
+    - createIndex:
+        collectionName: migrationscriptmetadata
+        keys: '{"accountId": 1, "parentId": 1, "instanceId": 1, "pipelineExecutionId":
+          1, "stageExecutionId": 1, "version": 1, "command": 1, "contentType": 1,
+          "deployedStatus": 1, "updatedAt": 1, "seq": -1}'
+        options: '{"name": "migration_script_meta_data_update_index"}'
+    - createIndex:
+        collectionName: migrationscriptmetadata
+        keys: '{"accountId": 1, "parentId": 1, "instanceId": 1, "pipelineExecutionId":
+          1, "stageExecutionId": 1, "command": 1, "contentType": 1, "deployedStatus":
+          1}'
+        options: '{"name": "migration_script_data_idx_deletion_filter"}'
+    - createIndex:
+        collectionName: migrationscriptmetadata
+        keys: '{"accountId": 1, "parentId": 1, "instanceId": 1, "pipelineExecutionId":
+          1, "stageExecutionId": 1, "command": 1, "contentType": 1, "updatedAt": 1,
+          "seq": 1}'
+        options: '{"name": "accountId_parentId_instanceId_pipelineExecutionId_stageExecutionId_command_contentType_updatedAt_seq_idx"}'
+    - createIndex:
+        collectionName: migrationscriptmetadata
+        keys: '{"accountId": 1, "parentId": 1, "schemaId": 1}'
+        options: '{"name": "accountId_parentId_schemaId_idx"}'
+- changeSet:
+    id: baseline-collections-interrupt
+    author: Harness
+    changes:
+    - createCollection:
+        collectionName: interrupt
+        options: '{}'
+    - createIndex:
+        collectionName: interrupt
+        keys: '{"accountId": 1, "parentId": 1, "instanceUuid": 1, "pipelineExecutionId":
+          1, "stageExecutionId": 1}'
+        options: '{"name": "execution_interrupt_idx"}'
+    - createIndex:
+        collectionName: interrupt
+        keys: '{"validUntil": 1}'
+        options: '{"name": "ttl_idx", "expireAfterSeconds": 0}'
+- changeSet:
+    id: baseline-collections-changeauthoringbillingevents
+    author: Harness
+    changes:
+    - createCollection:
+        collectionName: changeauthoringbillingevents
+        options: '{}'
+    - createIndex:
+        collectionName: changeauthoringbillingevents
+        keys: '{"accountId": 1, "schemaId": 1, "conversationId": 1}'
+        options: '{"name": "Unique_AccountId_SchemaId_ConversationId", "unique": true}'
+        unique: true
+    - createIndex:
+        collectionName: changeauthoringbillingevents
+        keys: '{"billingStatus": 1, "createdAt": 1}'
+        options: '{"name": "Idx_BillingStatus_CreatedAt"}'
+- changeSet:
+    id: baseline-collections-dbSnapshotMetadata
+    author: Harness
+    changes:
+    - createCollection:
+        collectionName: dbSnapshotMetadata
+        options: '{}'
+    - createIndex:
+        collectionName: dbSnapshotMetadata
+        keys: '{"accountId": 1, "parentId": 1, "instanceID": 1, "snapshotId": 1, "objectType":
+          1, "objectName": 1}'
+        options: '{"name": "Unique_DbSnapshotMetadata", "unique": true}'
+        unique: true
+- changeSet:
+    id: baseline-collections-flywayscriptentity
+    author: Harness
+    changes:
+    - createCollection:
+        collectionName: flywayscriptentity
+        options: '{}'
+    - createIndex:
+        collectionName: flywayscriptentity
+        keys: '{"accountId": 1, "parentId": 1, "schemaId": 1, "version": 1}'
+        options: '{"name": "Unique_FlywayScript", "unique": true}'
+        unique: true
+    - createIndex:
+        collectionName: flywayscriptentity
+        keys: '{"accountId": 1, "parentId": 1, "schemaId": 1, "updated": 1}'
+        options: '{"name": "accountId_parentId_schemaId_deployedAt_updated_idx"}'
+- changeSet:
+    id: baseline-collections-changeset
+    author: Harness
+    changes:
+    - createCollection:
+        collectionName: changeset
+        options: '{}'
+    - createIndex:
+        collectionName: changeset
+        keys: '{"accountId": 1, "schemaId": 1, "identifierFQN": 1}'
+        options: '{"name": "Unique_ChangeSet", "unique": true}'
+        unique: true
+    - createIndex:
+        collectionName: changeset
+        keys: '{"accountId": 1, "parentId": 1}'
+        options: '{"name": "accountId_parentId_idx"}'
+- changeSet:
+    id: baseline-collections-migrationstate
+    author: Harness
+    changes:
+    - createCollection:
+        collectionName: migrationstate
+        options: '{}'
+    - createIndex:
+        collectionName: migrationstate
+        keys: '{"accountId": 1, "schemaId": 1, "instanceId": 1, "changeSet": 1}'
+        options: '{"name": "Unique_Migration_State", "unique": true}'
+        unique: true
+    - createIndex:
+        collectionName: migrationstate
+        keys: '{"accountId": 1, "schemaId": 1, "instanceId": 1, "status": 1, "tag":
+          1}'
+        options: '{"name": "Migration_State_Tag_Status"}'
+    - createIndex:
+        collectionName: migrationstate
+        keys: '{"accountId": 1, "schemaId": 1, "instanceId": 1, "changeSetFQN": 1}'
+        options: '{"name": "Migration_State_Composite_Index_ChangesetFQN", "unique":
+          true}'
+        unique: true
+    - createIndex:
+        collectionName: migrationstate
+        keys: '{"accountId": 1, "parentId": 1}'
+        options: '{"name": "Migration_State_Composite_Index_ParentId"}'
+    - createIndex:
+        collectionName: migrationstate
+        keys: '{"accountId": 1, "schemaId": 1, "instanceId": 1, "status": 1, "updated":
+          1}'
+        options: '{"name": "Migration_State_Status_Updated_Idx"}'
+    - createIndex:
+        collectionName: migrationstate
+        keys: '{"accountId": 1, "schemaId": 1, "instanceId": 1, "status": 1, "externalHistorySync":
+          1}'
+        options: '{"name": "Migration_State_ExternalHistorySync_Idx"}'
+    - createIndex:
+        collectionName: migrationstate
+        keys: '{"accountId": 1, "schemaId": 1, "instanceId": 1, "planExecutionId":
+          1, "status": 1}'
+        options: '{"name": "Migration_State_Status_PlanExecutionId_Idx"}'
+- changeSet:
+    id: baseline-collections-changesetmetadata
+    author: Harness
+    changes:
+    - createCollection:
+        collectionName: changesetmetadata
+        options: '{}'
+    - createIndex:
+        collectionName: changesetmetadata
+        keys: '{"accountId": 1, "parentId": 1, "instanceId": 1, "pipelineExecutionId":
+          1, "stageExecutionId": 1, "changesetFQN": 1, "command": 1, "contentType":
+          1, "deployedStatus": 1, "seq": -1}'
+        options: '{"name": "changeset_meta_data_idx_pagination_filter"}'
+    - createIndex:
+        collectionName: changesetmetadata
+        keys: '{"accountId": 1, "parentId": 1, "instanceId": 1, "pipelineExecutionId":
+          1, "stageExecutionId": 1, "command": 1, "contentType": 1, "deployedStatus":
+          1}'
+        options: '{"name": "changeset_meta_data_idx_deletion_filter"}'
+    - createIndex:
+        collectionName: changesetmetadata
+        keys: '{"accountId": 1, "parentId": 1, "instanceId": 1, "pipelineExecutionId":
+          1, "stageExecutionId": 1, "command": 1, "contentType": 1, "updatedAt": 1,
+          "seq": 1}'
+        options: '{"name": "changeset_meta_data_sort_idx_pagination_filter"}'
+    - createIndex:
+        collectionName: changesetmetadata
+        keys: '{"expireAt": 1}'
+        options: '{"name": "changeset_ttl_idx", "expireAfterSeconds": 0}'
+- changeSet:
+    id: baseline-collections-commandexecutionhistory
+    author: Harness
+    changes:
+    - createCollection:
+        collectionName: commandexecutionhistory
+        options: '{}'
+    - createIndex:
+        collectionName: commandexecutionhistory
+        keys: '{"accountId": 1, "parentId": 1, "instanceId": 1, "planExecutionId":
+          1, "stageExecutionId": 1, "changeSetFQN": 1, "command": 1}'
+        options: '{"name": "Unique_Command_Execution_History", "unique": true}'
+        unique: true
+    - createIndex:
+        collectionName: commandexecutionhistory
+        keys: '{"accountId": 1, "parentId": 1, "instanceId": 1, "planExecutionId":
+          1, "stageExecutionId": 1, "command": 1, "status": 1, "changeSetFQN": 1,
+          "updated": -1}'
+        options: '{"name": "accountId_parentId_instanceId_execution_command_status_fqn_updated_idx"}'
+    - createIndex:
+        collectionName: commandexecutionhistory
+        keys: '{"accountId": 1, "parentId": 1, "instanceId": 1, "command": 1, "status":
+          1, "rolledBack": 1, "updated": -1, "changeSetFQN": 1}'
+        options: '{"name": "accountId_parentId_instanceId_command_status_rolledBack_updated_idx"}'
+    - createIndex:
+        collectionName: commandexecutionhistory
+        keys: '{"accountId": 1, "parentId": 1, "instanceId": 1, "planExecutionId":
+          1, "stageExecutionId": 1, "command": 1, "status": 1, "rolledBack": 1, "updated":
+          -1}'
+        options: '{"name": "accountId_parentId_instanceId_execution_command_status_rolledBack_updated_idx"}'

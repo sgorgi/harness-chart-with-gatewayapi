@@ -1,0 +1,344 @@
+# Default values for load-test-manager
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+global:
+  autoscaling:
+    enabled: false
+  pdb:
+    create: false
+  loadbalancerURL: "test@harness.io"
+  airgap: false
+  ha: false
+  commonAnnotations: {}
+  commonLabels: {}
+  monitoring:
+    enabled: false
+    managedPlatform: ""
+  opa:
+    enabled: false
+  cd:
+    # -- Enable to install CD
+    enabled: true
+  istio:
+    enabled: false
+    gateway:
+      create: true
+      port: 443
+      protocol: HTTPS
+    hosts:
+      - "*"
+    strict: true
+    tls:
+      credentialName: ""
+    virtualService:
+      hosts:
+        - ""
+      gateways: []
+  # Enable if using ingress objects
+  ingress:
+    enabled: false
+    disableHostInIngress: false
+    pathPrefix: ""
+    pathType: ""
+    loadBalancerIP: "0.0.0.0"
+    className: "harness"
+    loadBalancerEnabled: true
+    hosts:
+      - ""
+    tls:
+      enabled: false
+      secretName: harness-ssl
+    nginx:
+      # -- Create Nginx Controller.  True will deploy a controller into your cluster
+      create: true
+    defaultbackend:
+      # -- Create will deploy a default backend into your cluster
+      create: true
+    objects:
+      annotations: {}
+  database:
+    mongo:
+      # -- set false to configure external mongo and generate mongo uri protocol://hosts?extraArgs
+      installed: true
+      # --   set the mongo hosts if mongo.installed is set to false
+      hosts: [""]
+      # -- provide the passwordKey to reference mongo password
+      passwordKey: "mongo-test-pass"
+      # -- set the protocol for mongo uri
+      protocol: mongodb
+      # -- provide the secretname to reference mongo username and password
+      secretName: "test"
+      # -- provide the userKey to reference mongo username
+      userKey: "pass"
+      # -- set additional arguments to mongo uri
+      extraArgs: ""
+      secrets:
+        kubernetesSecrets:
+          - secretName: ""
+            keys:
+              MONGO_USER: ""
+              MONGO_PASSWORD: ""
+        secretManagement:
+          externalSecretsOperator:
+            - secretStore:
+                name: ""
+                kind: ""
+              remoteKeys:
+                MONGO_USER:
+                  name: ""
+                  property: ""
+                MONGO_PASSWORD:
+                  name: ""
+                  property: ""
+  waitForInitContainer:
+    enabled: true
+    image:
+      registry: docker.io
+      repository: harnesssecure/helm-init-container
+      pullPolicy: IfNotPresent
+      tag: "latest"
+      digest: "sha256:3e1e82d9f415e823193a5c48f9f782326e985107cf16c91081cbf5ed41249678"
+      imagePullSecrets: []
+monitoring:
+  port: 8889
+  path: /metrics
+## Platform Settings
+platform:
+  harness-manager:
+    featureFlags:
+      OPA: "OPA_PIPELINE_GOVERNANCE"
+      ADDITIONAL: "CHAOS_ENABLED"
+replicaCount: 1
+# TODO: remove this
+deployAsSts: false
+replicaCountSts: 0
+maxSurge: 1
+maxUnavailable: 0
+image:
+  registry: docker.io
+  repository: harnesssecure/load-test-manager-signed
+  pullPolicy: Always
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "1.12.2"
+  digest: "sha256:a1b645ed30fd72f42061663121a43e75cc5c8db487762e4edb2f3b69f2fdc2f1"
+#allowedOrigins: "*.*.*.*"
+configmap: {}
+mongoSecrets:
+  userName:
+    name: harness-secrets
+    key: mongodbUsername
+  password:
+    name: mongodb-replicaset-chart
+    key: mongodb-root-password
+nameOverride: ""
+fullnameOverride: ""
+metrics:
+  metricsPort: "8889"
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: false
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: "harness-default"
+podAnnotations: {}
+podLabels: {}
+podSecurityContext: {}
+# fsGroup: 2000
+
+securityContext: {}
+updateStrategy:
+  rollingUpdate:
+    maxSurge: 100%
+    maxUnavailable: 0
+  type: RollingUpdate
+progressDeadlineSeconds: 600
+#runAsUser: 65534
+#runAsNonRoot: true
+# capabilities:
+#   drop:
+#   - ALL
+# readOnlyRootFilesystem: true
+# runAsNonRoot: true
+# runAsUser: 1000
+
+service:
+  annotations: {}
+  type: ClusterIP
+  port: 8090
+  targetport: 8090
+virtualService:
+  annotations: {}
+  objects:
+    - name: load-test-manager-service
+      pathMatchType: prefix
+      pathRewrite: "/"
+      paths:
+        - path: "{{ .Values.global.istio.virtualService.pathPrefix }}/loadTest/manager/api/"
+          backend:
+            service:
+              name: load-test-manager-service
+ingress:
+  objects:
+    - annotations:
+        nginx.ingress.kubernetes.io/rewrite-target: /$2
+        nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+        nginx.ingress.kubernetes.io/use-regex: "true"
+      paths:
+        - path: "{{ .Values.global.ingress.pathPrefix }}/loadTest/manager/api(/|$)(.*)"
+          backend:
+            service:
+              name: load-test-manager-service
+resources:
+  limits:
+    memory: 512Mi
+  requests:
+    cpu: 600m
+    memory: 512Mi
+autoscaling:
+  enabled: false
+  targetCPU: ""
+  targetMemory: ""
+nodeSelector: {}
+tolerations: []
+affinity: {}
+# extraVolumes:
+#   - name: volume-test
+#     configMap:
+#       name: test-config
+#       # readOnly: true
+# extraVolumeMounts:
+#   - name: volume-test
+#     mountPath: /opt/harness/config
+lifecycleHooks: {}
+# lifecycleHooks:
+#   postStart:
+#     exec:
+#       command:
+#   preStop:
+#     exec:
+#       command:
+
+database:
+  mongo:
+    harnesschaos:
+      enabled: false
+      protocol: ""
+      hosts: []
+      extraArgs: ""
+      secrets:
+        kubernetesSecrets:
+          - secretName: ""
+            keys:
+              MONGODB_USER: ""
+              MONGODB_PASSWORD: ""
+        secretManagement:
+          externalSecretsOperator:
+            - secretStore:
+                name: ""
+                kind: ""
+              remoteKeys:
+                MONGODB_USER:
+                  name: ""
+                  property: ""
+                MONGODB_PASSWORD:
+                  name: ""
+                  property: ""
+secrets:
+  default:
+    NG_JWT_SECRET: "IC04LYMBf1lDP5oeY4hupxd4HJhLmN6azUku3xEbeE3SUx5G3ZYzhbiwVtK4i7AmqyU9OZkwB4v8E9qM"
+    PIPELINE_JWT_SECRET: "IC04LYMBf1lDP5oeY4hupxd4HJhLmN6azUku3xEbeE3SUx5G3ZYzhbiwVtK4i7AmqyU9OZkwB4v8E9qM"
+    JWT_SECRET: "dOkdsVqdRPPRJG31XU0qY4MPqmBBMk0PTAGIKM6O7TGqhjyxScIdJe80mwh5Yb5zF3KxYBHw6B3Lfzlq"
+    JWT_IDENTITY_SERVICE_SECRET: "HVSKUYqD4e5Rxu12hFDdCJKGM64sxgEynvdDhaOHaTHhwwn0K4Ttr0uoOxSsEVYNrUU="
+    LOCUST_CALLBACK_TOKEN: "secure-token-vm-test-2025"
+    LOG_SERVICE_TOKEN: "c76e567a-b341-404d-a8dd-d9738714eb82"
+    API_TOKEN: ""
+    CHAOS_LINUX_IFS_JWT_SECRET: "IC04LYMBf1lDP5oeY4hupxd4HJhLmN6azUku3xEbeE3SUx5G3ZYzhbiwVtK4i7AmqyU9OZkwB4v8E9qM"
+    FF_SDK_KEY: ""
+    CHAOS_MACHINE_IFS_JWT_SECRET: "IC04LYMBf1lDP5oeY4hupxd4HJhLmN6azUku3xEbeE3SUx5G3ZYzhbiwVtK4i7AmqyU9OZkwB4v8E9qM"
+    CHAOS_K8S_IFS_JWT_SECRET: "IC04LYMBf1lDP5oeY4hupxd4HJhLmN6azUku3xEbeE3SUx5G3ZYzhbiwVtK4i7AmqyU9OZkwB4v8E9qM"
+    LOAD_TEST_MANAGER_SERVICE_SECRET: "jud5EgLzGKJguekY"
+  kubernetesSecrets:
+    - secretName: ""
+      keys:
+        NG_JWT_SECRET: ""
+        PIPELINE_JWT_SECRET: ""
+        JWT_SECRET: ""
+        JWT_IDENTITY_SERVICE_SECRET: ""
+        LOCUST_CALLBACK_TOKEN: ""
+        LOG_SERVICE_TOKEN: ""
+        API_TOKEN: ""
+        CHAOS_LINUX_IFS_JWT_SECRET: ""
+        FF_SDK_KEY: ""
+        CHAOS_MACHINE_IFS_JWT_SECRET: ""
+        CHAOS_K8S_IFS_JWT_SECRET: ""
+        LOAD_TEST_MANAGER_SERVICE_SECRET: ""
+  secretManagement:
+    externalSecretsOperator:
+      - secretStore:
+          name: ""
+          kind: ""
+        remoteKeys:
+          NG_JWT_SECRET:
+            name: ""
+            property: ""
+          PIPELINE_JWT_SECRET:
+            name: ""
+            property: ""
+          JWT_SECRET:
+            name: ""
+            property: ""
+          JWT_IDENTITY_SERVICE_SECRET:
+            name: ""
+            property: ""
+          LOCUST_CALLBACK_TOKEN:
+            name: ""
+            property: ""
+          API_TOKEN:
+            name: ""
+            property: ""
+          CHAOS_LINUX_IFS_JWT_SECRET:
+            name: ""
+            property: ""
+          FF_SDK_KEY:
+            name: ""
+            property: ""
+          CHAOS_MACHINE_IFS_JWT_SECRET:
+            name: ""
+            property: ""
+          CHAOS_K8S_IFS_JWT_SECRET:
+            name: ""
+            property: ""
+          LOAD_TEST_MANAGER_SERVICE_SECRET:
+            name: ""
+            property: ""
+config:
+  SERVER_HOST: "0.0.0.0"
+  SERVER_PORT: "8090"
+  METRIC_PORT: "{{ .Values.metrics.metricsPort }}"
+  PLATFORM_SERVICE_ENDPOINT: "http://platform-service:9005/api"
+  PIPELINE_SERVICE_ENDPOINT: "http://pipeline-service:12001/api"
+  SAAS_ENABLED: "false"
+  DEFAULT_LOAD_TEST_LIMIT: "1000"
+  ACCESS_CONTROL_ENDPOINT: http://access-control:9006/api
+  NG_MANAGER_ENDPOINT: http://ng-manager:7090
+  MONGODB_CONNECT_TIMEOUT_SECONDS: "10"
+  MONGODB_MAX_POOL_SIZE: "100"
+  ORCHESTRATOR_METRICS_POLL_INTERVAL_SECONDS: "1"
+  LINUX_INFRA_SERVER_SVC_ENDPOINT: "http://chaos-linux-ifs-service:4000"
+  K8S_INFRA_SERVER_SVC_ENDPOINT: "http://chaos-k8s-ifs-service:6000"
+  EXTERNAL_URL: "{{ .Values.global.loadbalancerURL }}/gateway/chaos/lserver/api"
+  FF_CLIENT_CONFIG_URL: ""
+  FF_CLIENT_EVENT_URL: ""
+  FF_CLIENT_PULL_INTERVAL: "1"
+  FF_CLIENT_MAX_AUTH_RETRIES: "5"
+  FF_CLIENT_ANALYTICS_ENABLED: "false"
+  FF_CLIENT_STREAM_ENABLED: "true"
+  FF_CLIENT_WAIT_FOR_INITIALIZED: "false"
+  USE_LEGACY_FEATURE_FLAGS: "true"
+  MACHINE_INFRA_SERVER_SVC_ENDPOINT: "http://chaos-machine-ifs-service:4000"
+rbac:
+  rules: []
+pdb:
+  create: false

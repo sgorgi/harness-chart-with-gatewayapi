@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ti-service.name" . }}
+  namespace: {{ .Release.Namespace }}
+  {{- if .Values.global.commonLabels }}
+  labels:
+    {{- include "harnesscommon.tplvalues.render" ( dict "value" .Values.global.commonLabels "context" $ ) | nindent 4 }}
+  {{- end }}
+  {{- if .Values.global.commonAnnotations }}
+  annotations: {{- include "harnesscommon.tplvalues.render" ( dict "value" .Values.global.commonAnnotations "context" $ ) | nindent 4 }}
+  {{- end }}
+data:
+  {{- include "harnesscommon.tplvalues.render" ( dict "value" .Values.config "context" $) | nindent 2}}
+  {{- if .Values.additionalConfigs }}
+  {{- toYaml .Values.additionalConfigs | nindent 2 }}
+  {{- end }}
+  {{- include "harnesscommon.secretsLoader.configContent" (dict "ctx" $ "databaseSecrets" (list 
+    (dict "dbtype" "mongo" "usernamesecrets" (list "TIHARNESS_MONGO_USER" "TI_SERVICE_MONGODB_USERNAME") "passwordsecrets" (list "TIHARNESS_MONGO_PASSWORD" "TI_SERVICE_MONGODB_PASSWORD"))
+    (dict "dbtype" "redis" "usernamesecrets" (list "EVENTS_FRAMEWORK_REDIS_USERNAME") "passwordsecrets" (list "EVENTS_FRAMEWORK_REDIS_PASSWORD"))
+    (dict "dbtype" "timescaledb" "usernamesecrets" (list "TI_SERVICE_TIMESCALE_USERNAME") "passwordsecrets" (list "TI_SERVICE_TIMESCALE_PASSWORD"))
+  )) | nindent 2}}

@@ -1,0 +1,1 @@
+{{ include "harnesscommon.monitoring.podMonitor" (dict "name" "code-githa" "ctx" $ "label" "app.kubernetes.io/name") }}

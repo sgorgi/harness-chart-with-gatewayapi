@@ -1,0 +1,94 @@
+# Default values for redis
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+global:
+  storageClass: ""
+  imagePullSecrets: []
+replicaCount: 3
+# -- Enable Hard pod anti-affinity during scheduling
+useAntiAffinity: true
+redis:
+  resources:
+    limits:
+      memory: 200Mi
+    requests:
+      cpu: 0.1
+      memory: 200Mi
+  image:
+    registry: docker.io
+    tag: 7.4.9-jammy
+    repository: harnesssecure/redis
+    pullPolicy: IfNotPresent
+    digest: "sha256:1d1bb6d7d2f6b0c7c3de83740c83d5026b2559dc9c8c103811bd767bf48d7ceb"
+    pullSecrets: []
+sentinel:
+  resources:
+    limits:
+      memory: 200Mi
+    requests:
+      cpu: 100m
+      memory: 200Mi
+  image:
+    registry: docker.io
+    tag: 7.4.9-jammy
+    repository: harnesssecure/redis
+    pullPolicy: IfNotPresent
+    digest: "sha256:1d1bb6d7d2f6b0c7c3de83740c83d5026b2559dc9c8c103811bd767bf48d7ceb"
+    pullSecrets: []
+metrics:
+  enabled: false
+  serviceMonitor:
+    enabled: false
+  resources: {}
+  image:
+    registry: docker.io
+    tag: 1.83.0-jammy
+    repository: harnesssecure/redis_exporter
+    pullPolicy: IfNotPresent
+    digest: "sha256:128f96805e9c6d96ba53c0c97344b8c9b05e345f4dc91f60f9d500dfd67764f7"
+initContainers:
+  config_init:
+    image:
+      registry: docker.io
+      tag: 7.4.9-jammy
+      repository: harnesssecure/redis
+      pullPolicy: IfNotPresent
+      digest: "sha256:1d1bb6d7d2f6b0c7c3de83740c83d5026b2559dc9c8c103811bd767bf48d7ceb"
+      pullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: false
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: "harness-default"
+podAnnotations: {}
+imagePullSecrets: {}
+podSecurityContext:
+  fsGroup: 1000
+  runAsNonRoot: true
+  runAsUser: 1000
+securityContext:
+  runAsUser: 65534
+  runAsNonRoot: true
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+volumeClaimTemplate:
+  resources:
+    requests:
+      storage: 10Gi
+service:
+  type: ClusterIP
+  sentinelport: 26379
+  serverport: 6379
+  metricsPort: 9121
+nodeSelector: {}
+tolerations: []
+affinity: {}

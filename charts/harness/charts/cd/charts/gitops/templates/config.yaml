@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "gitops.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gitops.labels" . | nindent 4 }}
+    {{- if .Values.global.commonLabels }}
+    {{- include "harnesscommon.tplvalues.render" ( dict "value" .Values.global.commonLabels "context" $ ) | nindent 4 }}
+    {{- end }}
+  {{- if .Values.global.commonAnnotations }}
+  annotations: {{- include "harnesscommon.tplvalues.render" ( dict "value" .Values.global.commonAnnotations "context" $ ) | nindent 4 }}
+  {{- end }}
+data:
+  {{- include "harnesscommon.tplvalues.render" ( dict "value" .Values.config "context" $) | nindent 2}}
+  {{- include "harnesscommon.monitoring.config" . | nindent 2 }}
+  {{- include "harnesscommon.secretsLoader.configContent" (dict "ctx" $ "databaseSecrets" (list 
+    (dict "dbtype" "mongo" "usernamesecrets" (list "HARNESSGITOPS_MONGO_USER") "passwordsecrets" (list "HARNESSGITOPS_MONGO_PASSWORD"))
+    (dict "dbtype" "redis" "usernamesecrets" (list "REDIS_USERNAME") "passwordsecrets" (list "REDIS_PASSWORD"))
+    (dict "dbtype" "timescaledb" "usernamesecrets" (list "GITOPS_SERVICE_TIMESCALE_USER_NAME" "TIMESCALEDB_USERNAME") "passwordsecrets" (list "GITOPS_SERVICE_TIMESCALE_PASSWORD" "TIMESCALE_PASSWORD"))
+  )) | nindent 2}}

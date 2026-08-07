@@ -1,0 +1,27 @@
+dependencies:
+- name: minio
+  repository: file://./minio
+  version: 17.0.15
+- name: mongodb
+  repository: https://charts.bitnami.com/bitnami
+  version: 13.1.2
+- name: redis
+  repository: file://./redis
+  version: 0.8.2
+- name: postgresql
+  repository: file://./postgresql
+  version: 17.0.2
+- name: clickhouse
+  repository: https://charts.bitnami.com/bitnami
+  version: 2.1.0
+- name: harness-common
+  repository: https://harness.github.io/helm-common
+  version: 1.7.2
+- name: elasticsearch
+  repository: https://charts.bitnami.com/bitnami
+  version: 19.16.1
+- name: kafka
+  repository: https://charts.bitnami.com/bitnami
+  version: 32.2.18
+digest: sha256:16fec36c7cccf3672f3f375f3abd1e466d5137e43c04ba9c879d138d63df1688
+generated: "2026-05-21T00:45:00.753498+05:30"

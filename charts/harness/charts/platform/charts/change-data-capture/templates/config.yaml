@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "change-data-capture.name" . }}
+  namespace: '{{ .Release.Namespace }}'
+  {{- if .Values.global.commonLabels }}
+  labels:
+    {{- include "harnesscommon.tplvalues.render" ( dict "value" .Values.global.commonLabels "context" $ ) | nindent 4 }}
+  {{- end }}
+  {{- if .Values.global.commonAnnotations }}
+  annotations: {{- include "harnesscommon.tplvalues.render" ( dict "value" .Values.global.commonAnnotations "context" $ ) | nindent 4 }}
+  {{- end }}
+data:
+  {{- include "harnesscommon.tplvalues.render" ( dict "value" .Values.config "context" $) | nindent 2}}
+  STACK_DRIVER_LOGGING_ENABLED: {{ .Values.global.stackDriverLoggingEnabled | quote }}
+  {{ include "harnesscommon.harnessfunctions.java17flags" (dict "context" $) | nindent 2 }}
+  {{- include "harnesscommon.monitoring.config" . | nindent 2 }}
+  {{- if .Values.additionalConfigs }}
+  {{- toYaml .Values.additionalConfigs | nindent 2 }}
+  {{- end }}
+  {{ include "harnesscommon.logging.setFileLogging" . | nindent 2 }}
+  {{- include "harnesscommon.secretsLoader.configContent" (dict "ctx" $ "databaseSecrets" (list 
+    (dict "dbtype" "mongo" "usernamesecrets" (list "HARNESS_MONGO_USER" "EVENTS_MONGO_USER" "PMSHARNESS_MONGO_USER" "CHANGEDATACAPTURE_MONGO_USER" "NGHARNESS_MONGO_USER" "CVNGHARNESS_MONGO_USER" "HARNESSCHAOS_MONGO_USER" "SSCAHARNESS_MONGO_USER") "passwordsecrets" (list "HARNESS_MONGO_PASSWORD" "EVENTS_MONGO_PASSWORD" "PMSHARNESS_MONGO_PASSWORD" "CHANGEDATACAPTURE_MONGO_PASSWORD" "NGHARNESS_MONGO_PASSWORD" "CVNGHARNESS_MONGO_PASSWORD" "HARNESSCHAOS_MONGO_PASSWORD" "SSCAHARNESS_MONGO_PASSWORD"))
+    (dict "dbtype" "timescaledb" "usernamesecrets" (list "TIMESCALEDB_USERNAME") "passwordsecrets" (list "TIMESCALEDB_PASSWORD"))
+  )) | nindent 2}}

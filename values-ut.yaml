@@ -1,0 +1,24 @@
+# GENERATOR INPUT (portable, environment-specific): copy this deployment key and
+# the gatewayApi key below to the consuming repository's environment values.
+deployment:
+  namespace: harness-ut-my
+
+# STANDALONE FIXTURE / UPSTREAM HARNESS INPUT: do not blindly copy this block.
+# Merge the equivalent hostname, certificate, and external URL settings into the
+# consuming repository's existing Harness values. They are also the source from
+# which the generator discovers listeners and TLS references.
+harness:
+  global:
+    ingress:
+      hosts:
+        - harness-ut.example.com
+      tls:
+        secretName: harness-ut-tls
+    loadbalancerURL: https://harness-ut.example.com
+
+gatewayApi:
+  outputDirectory: generated/ut
+  listenerSet:
+    name: harness-ut
+  referenceGrant:
+    name: harness-ut-listenerset-secrets

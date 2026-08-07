@@ -1,0 +1,78 @@
+# GENERATOR INPUT (portable): copy this key only if you want values-driven
+# release/namespace selection. Both can instead be passed as CLI options.
+deployment:
+  # Helm release name used by the generator.
+  releaseName: harness
+
+# STANDALONE FIXTURE ONLY: these are upstream Harness values that make this
+# repository safe to render and demonstrate. Do not copy this whole block into
+# another repository; keep that repository's existing Harness values instead.
+harness:
+  global:
+    # The deployment itself does not create Ingress resources. The generator
+    # temporarily enables this value while rendering, then extracts only the
+    # Ingress objects as its conversion source.
+    ingress:
+      enabled: false
+      className: harness
+      tls:
+        enabled: true
+
+    # Keep Harness-common's newer Gateway API renderer disabled. This repository
+    # deliberately converts the 0.42.1 Ingress output in one central place.
+    gatewayAPI:
+      enabled: false
+
+# GENERATOR CONFIG (portable): copy this entire key to the shared/base values in
+# the repository that will own the generator.
+gatewayApi:
+  enabled: true
+  apiVersion: gateway.networking.k8s.io/v1
+
+  sourceIngress:
+    # Helm value to force only during the temporary source render.
+    forceEnabled: true
+    enabledValuePath: harness.global.ingress.enabled
+
+  # Harness 0.42.1 uses NGINX regex captures in rewrite-target annotations.
+  # Envoy Gateway's HTTPRouteFilter is required to preserve those rewrites.
+  provider: envoy-gateway
+  envoyGateway:
+    # Informational target used in the report. The generated extension API below
+    # is the API supported by Envoy Gateway 1.8.3.
+    version: 1.8.3
+    httpRouteFilterApiVersion: gateway.envoyproxy.io/v1alpha1
+
+  parentGateway:
+    # Shared Envoy Gateway. These values identify the only generated-resource
+    # dependency that is outside the Harness Helm release namespace.
+    name: shared-gateway
+    namespace: gateway-system
+
+  listenerSet:
+    # The name may be overridden per environment. Its namespace is deliberately
+    # not configurable: the generator always uses deployment.namespace (or the
+    # --namespace CLI override) for the ListenerSet and all Harness-side objects.
+    name: harness
+    http:
+      enabled: true
+      port: 80
+      redirectToHttps: true
+      redirectStatusCode: 301
+    https:
+      enabled: true
+      port: 443
+
+  referenceGrant:
+    # Created in the Harness release namespace. With ListenerSet and Secret in
+    # that same namespace this is normally redundant, but is emitted so the
+    # integration keeps an explicit, narrowly scoped Secret-access declaration.
+    name: harness-listenerset-secrets
+
+  httpRoute:
+    # Gateway API allows at most 16 rules per HTTPRoute.
+    maxRules: 16
+
+  commonLabels:
+    app.kubernetes.io/part-of: company-harness
+    app.kubernetes.io/managed-by: harness-gateway-generator

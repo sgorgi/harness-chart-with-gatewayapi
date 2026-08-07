@@ -1,0 +1,275 @@
+global:
+  ha: false
+  gatewayAPI:
+    # Enable GatewayAPI HTTPRoute generation (requires global.ingress.enabled)
+    enabled: false
+    # Default parent Gateway reference for all HTTPRoutes
+    parentRef:
+      name: ""
+      namespace: ""
+      sectionName: ""
+      port:
+
+    # Shared/default Envoy Gateway policies (Option C: Hybrid - shared defaults + per-route overrides)
+    policies:
+      # BackendTrafficPolicy - backend timeouts, connection settings, protocol
+      # These settings apply to traffic from Gateway to backend Services
+      backendTraffic:
+        enabled: false
+        # Timeouts for backend connections
+        timeout:
+          http:
+            # e.g., "300s" - equivalent to nginx proxy-send-timeout
+            requestTimeout: ""
+            # e.g., "3600s" - connection idle timeout
+            connectionIdleTimeout: ""
+          tcp:
+            # e.g., "900s" - equivalent to nginx proxy-connect-timeout
+            connectTimeout: ""
+        # Backend connection settings
+        connection:
+          # e.g., "10240Mi" - equivalent to nginx client-max-body-size
+          bufferLimit: ""
+        # Backend protocol (gRPC, H2C, etc.)
+        # e.g., "GRPC" - equivalent to nginx backend-protocol: GRPC
+        protocol: ""
+        # Load balancing policy
+        # e.g., "RoundRobin", "LeastRequest", "Random"
+        loadBalancer:
+          type: ""
+        # Retry policy
+        retry:
+          numRetries: 0
+          perRetryTimeout: ""
+
+      # ClientTrafficPolicy - client-side settings (attaches to Gateway, not individual routes)
+      # These settings apply to traffic from clients to the Gateway
+      clientTraffic:
+        enabled: false
+        # Client-side connection limits
+        connection:
+          # e.g., "1024Mi" - equivalent to nginx proxy-body-size
+          bufferLimit: ""
+          # e.g., "3600s"
+          connectionIdleTimeout: ""
+        # Client-side timeouts
+        timeout:
+          http:
+            # e.g., "3600s" - equivalent to nginx client_body_timeout
+            requestReceivedTimeout: ""
+        # HTTP/2 settings
+        http2:
+          maxConcurrentStreams: 0
+
+      # SecurityPolicy - IP whitelisting, CORS, JWT, etc.
+      security:
+        enabled: false
+        # IP-based authorization
+        authorization:
+          # "Allow" or "Deny"
+          defaultAction: ""
+          rules: []
+            # Example:
+            # - action: "Allow"
+            #   principal:
+            #     clientCIDRs:
+            #       - "10.0.0.0/8"
+            #       - "192.168.1.0/24"
+        # CORS policy
+        cors:
+          allowOrigins: []
+          allowMethods: []
+          allowHeaders: []
+          exposeHeaders: []
+          maxAge: ""
+        # JWT authentication
+        jwt:
+          providers: []
+
+    # HTTPRoute-level shared defaults
+    httpRoute:
+      # Request header manipulation - applies to all routes unless overridden
+      requestHeaders:
+        set: []
+          # - name: "X-Custom-Header"
+          #   value: "value"
+        add: []
+        remove: []
+
+      # Response header manipulation - applies to all routes unless overridden
+      responseHeaders:
+        set: []
+        add: []
+        remove: []
+
+      # Upstream host override - equivalent to nginx upstream-vhost
+      # e.g., "app.example.io"
+      upstreamHostOverride: ""
+
+      # Additional hostnames (server aliases) - equivalent to nginx server-alias
+      # Note: Gateway API supports wildcards but not regex patterns
+      additionalHostnames: []
+        # - "*.alias.example.io"
+        # - "alias-staging.example.io"
+  # Used by nginx ingress and gateway-api -- both templates can be
+  # used in tandem allowing for swapping between what is being used
+  # by changing target destination in global gateway.
+  ingress:
+    enabled: false
+    # List of hostnames for HTTPRoute/nginx
+    hosts: []
+    # Set to true to use wildcard "*" hostname instead of specific hosts
+    disableHostInIngress: false
+    objects:
+      # Annotations to apply to all nginx ingress/HTTPRoute objects
+      annotations: {}
+      gatewayPolicies: {}
+  # Common labels applied to all resources
+  commonLabels: {}
+  # Common annotations applied to all resources
+  commonAnnotations: {}
+  cet:
+    # Global Settings/Enabling of Error Tracking Agent
+    # Note: These are for Enabling the Agent with Harness Services
+    agent:
+      enabled: false
+      collectorURL: ""
+  externalSecretsLoader:
+    enabled: false
+    provider: "vault"
+    image:
+      repository: "repo/image"
+      tag: "tag"
+      pullPolicy: "IfNotPresent"
+    vault:
+      address: ""
+      engine: ""
+      basePath: ""
+      tlsDisabled: false
+      caCert:
+        enabled: false
+        secretName: ""
+        secretKey: "ca.crt"
+      auth:
+        method: "token"
+        # For Token auth:
+        token: "vault-token"
+        # For AppRole:
+        roleId: ""
+        secretId: ""
+        # For Kubernetes auth:
+        role: ""
+    databases:
+      mongo:
+        useDatabaseSecretsEngine: false
+        engine: ""
+        overridePath: ""
+        databaseRole: ""
+      redis:
+        useDatabaseSecretsEngine: false
+        engine: ""
+        overridePath: ""
+        databaseRole: ""
+      postgres:
+        useDatabaseSecretsEngine: false
+        engine: ""
+        basePath: ""
+        databaseRole: ""
+  database:
+    postgres:
+      ## - installed = true if installed within cluster
+      installed: true
+      ## - protocol to use for connection
+      protocol: postgres
+      ## - host array for external
+      hosts:
+        - postgres:5432
+      ## - secret name containing external values
+      secretName: ""
+      ## - key within secret containing username
+      userKey: ""
+      ## - key within secret containing password
+      passwordKey: ""
+      ## - extra arguments set to connection string
+      extraArgs: ""
+    mongo:
+      installed: true
+      databasePrefix: ""
+      protocol: mongodb
+      hosts: []
+      secretName: ""
+      userKey: ""
+      passwordKey: ""
+      extraArgs: ""
+    timescaledb:
+      installed: true
+      protocol: "jdbc:postgresql"
+      hosts:
+        - timescaledb-single-chart:5432
+      secretName: ""
+      userKey: ""
+      passwordKey: ""
+      extraArgs: ""
+    redis:
+      installed: true
+      protocol: "redis"
+      hosts:
+      - "redis:6379"
+      secretName: "secret"
+      userKey: "user"
+      passwordKey: "password"
+      extraArgs: ""
+  smtpCreateSecret:
+    enabled: false
+    SMTP_USERNAME: ""
+    SMTP_PASSWORD: ""
+    SMTP_HOST: ""
+    SMTP_USE_SSL: "true"
+    SMTP_PORT: "465"
+    secrets:
+      kubernetesSecrets:
+        - secretName: ""
+          keys:
+            SMTP_USERNAME: ""
+            SMTP_PASSWORD": ""
+            SMTP_HOST: ""
+            SMTP_PORT": ""
+            SMTP_USE_SSL": ""
+      secretManagement:
+        externalSecretsOperator:
+          - secretStore:
+              name: ""
+              kind: ""
+            remoteKeys:
+              SMTP_USERNAME:
+                name: ""
+                property: ""
+              SMTP_PASSWORD":
+                name: ""
+                property: ""
+              SMTP_HOST:
+                name: ""
+                property: ""
+              SMTP_PORT":
+                name: ""
+                property: ""
+              SMTP_USE_SSL:
+                name: ""
+                property: ""
+
+# KEDA (Kubernetes Event-driven Autoscaling). See docs/KEDA.md.
+# Consuming charts set keda.enabled and keda.scaledObject (and optionally triggerAuthentication).
+keda:
+  enabled: false
+  scaledObject:
+    # minReplicaCount: 0
+    # maxReplicaCount: 100
+    # pollingInterval: 30
+    # cooldownPeriod: 300
+    # triggers: []   # required when enabled — list of KEDA trigger specs
+    # fallback: {}   # optional
+    # advanced: {}  # optional (e.g. horizontalPodAutoscalerConfig.behavior)
+  triggerAuthentication:
+    create: false
+    # name: ""
+    # spec: {}   # passthrough: podIdentity, secretTargetRef, env, etc.

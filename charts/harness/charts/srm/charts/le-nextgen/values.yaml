@@ -1,0 +1,220 @@
+# Default values for le-nextgen
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+
+config:
+  https_port: "10800"
+  taskTypes: "CANARY_LOG_ANALYSIS,TEST_LOG_ANALYSIS,TIME_SERIES_CANARY,TIME_SERIES_LOAD_TEST,BEFORE_AFTER_DEPLOYMENT_TIME_SERIES,CANARY_DEPLOYMENT_TIME_SERIES,LOG_ANALYSIS,LOG_FEEDBACK,CV_LOG_CLUSTER"
+  learning_env: "on_prem"
+  server_url: "http://cv-nextgen:6060"
+  # Number of worker threads for task fetching. Leave empty to auto-detect from CPU cores.
+  parallel_worker_threads: "2"
+srmConfig:
+  https_port: "10800"
+  taskTypes: "SERVICE_GUARD_TIME_SERIES,SERVICE_GUARD_LOG_ANALYSIS,LOG_CLUSTER,SERVICE_GUARD_FEEDBACK_ANALYSIS"
+  learning_env: "on_prem"
+  server_url: "http://cv-nextgen:6060"
+  # Number of worker threads for task fetching. Leave empty to auto-detect from CPU cores.
+  parallel_worker_threads: "2"
+global:
+  autoscaling:
+    enabled: false
+  pdb:
+    create: false
+  ingress:
+    enabled: false
+  kubeVersion: ""
+  loadbalancerURL: ""
+  imagePullSecrets: []
+  commonAnnotations: {}
+  commonLabels: {}
+  externalSecretsLoader:
+    enabled: false
+    provider: "vault"
+    image:
+      repository: "repo/image"
+      tag: "tag"
+      pullPolicy: "IfNotPresent"
+    vault:
+      address: ""
+      engine: ""
+      basePath: ""
+      auth:
+        method: "token"
+        # For Token auth:
+        token: "vault-token"
+        # For AppRole:
+        roleId: ""
+        secretId: ""
+        # For Kubernetes auth:
+        role: ""
+    databases:
+      mongo:
+        useDatabaseSecretsEngine: false
+        engine: ""
+        overridePath: ""
+        databaseRole: ""
+      redis:
+        useDatabaseSecretsEngine: false
+        engine: ""
+        overridePath: ""
+        databaseRole: ""
+      postgres:
+        useDatabaseSecretsEngine: false
+        engine: ""
+        basePath: ""
+        databaseRole: ""
+      timescaledb:
+        useDatabaseSecretsEngine: false
+        engine: ""
+        basePath: ""
+        databaseRole: ""
+replicaCount: 1
+image:
+  registry: docker.io
+  repository: harnesssecure/le-nextgen-signed
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "1.19.0"
+  digest: "sha256:e816634d5e564e7ac03076ff3b5b4ea4ec780d96c8fcf9219466910849af74fb"
+  imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+appLogLevel: INFO
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: false
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: "harness-default"
+podAnnotations: {}
+podLabels: {}
+imagePullSecrets: {}
+podSecurityContext: {}
+# fsGroup: 2000
+
+securityContext:
+  runAsNonRoot: true
+service:
+  type: ClusterIP
+  port: 8108
+resources:
+  limits:
+    cpu: 2
+    memory: 6144Mi
+  requests:
+    cpu: 2
+    memory: 6144Mi
+autoscaling:
+  enabled: false
+  targetCPU: ""
+  targetMemory: ""
+keda:
+  enabled: true
+  prometheus:
+    # Prometheus server address. Override per environment as needed.
+    serverAddress: "http://prometheus-frontend.gmp-frontend:9090/"
+  scaledObject:
+    minReplicaCount: 1
+    maxReplicaCount: 20
+    pollingInterval: 30
+    # Lower cooldown (100s) allows faster response to load drops.
+    # stabilizationWindowSeconds (300s) prevents premature scale-down within a window.
+    cooldownPeriod: 100
+    initialCooldownPeriod: 0
+    annotations: {}
+    triggers:
+      - type: prometheus
+        metadata:
+          serverAddress: '{{ .Values.keda.prometheus.serverAddress | default "http://prometheus-frontend.gmp-frontend:9090/" }}'
+          query: |
+            sum(io_harness_custom_metric_le_tasks_created_total{namespace="{{ .Release.Namespace }}",job="cv-nextgen"}) - sum(io_harness_custom_metric_le_tasks_completed_total{namespace="{{ .Release.Namespace }}",job="cv-nextgen"})
+          # Target pending tasks per pod. At 150 tasks/pod with maxReplicaCount=20,
+          # the system can handle ~3000 pending tasks before hitting max scale.
+          threshold: "150"
+    fallback:
+      failureThreshold: 3
+      replicas: 2
+    advanced:
+      horizontalPodAutoscalerConfig:
+        behavior:
+          scaleDown:
+            stabilizationWindowSeconds: 300
+            policies:
+              - type: Pods
+                value: 1
+                periodSeconds: 60
+  triggerAuthentication:
+    create: false
+    name: ""
+    spec: {}
+srm:
+  keda:
+    enabled: true
+    scaledObject:
+      minReplicaCount: 1
+      maxReplicaCount: 20
+      pollingInterval: 30
+      # Lower cooldown (100s) allows faster response to load drops.
+      # stabilizationWindowSeconds (300s) prevents premature scale-down within a window.
+      cooldownPeriod: 100
+      initialCooldownPeriod: 0
+      annotations: {}
+      triggers:
+        - type: prometheus
+          metadata:
+            # Prometheus server address. Override per environment as needed.
+            serverAddress: http://prometheus-frontend.gmp-frontend:9090/
+            query: |
+              sum(io_harness_custom_metric_le_tasks_created_total) - sum(io_harness_custom_metric_le_tasks_completed_total)
+            # Target pending tasks per pod. At 150 tasks/pod with maxReplicaCount=20,
+            # the system can handle ~3000 pending tasks before hitting max scale.
+            threshold: "150"
+      fallback:
+        failureThreshold: 3
+        replicas: 2
+      advanced:
+        horizontalPodAutoscalerConfig:
+          behavior:
+            scaleDown:
+              stabilizationWindowSeconds: 300
+              policies:
+                - type: Pods
+                  value: 1
+                  periodSeconds: 60
+    triggerAuthentication:
+      create: false
+      name: ""
+      spec: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+additionalConfigs: {}
+secrets:
+  default:
+    VERIFICATION_SERVICE_SECRET: "59MR5RlVARcdH7zb7pNx6GzqiglBmXR8"
+  kubernetesSecrets:
+    - secretName: ""
+      keys:
+        VERIFICATION_SERVICE_SECRET: ""
+  secretManagement:
+    externalSecretsOperator:
+      - secretStore:
+          name: ""
+          kind: ""
+        remoteKeys:
+          VERIFICATION_SERVICE_SECRET:
+            name: ""
+            property: ""
+updateStrategy:
+  rollingUpdate:
+    maxSurge: 100%
+    maxUnavailable: 0
+  type: RollingUpdate
+pdb:
+  create: false
+rbac:
+  roles: []

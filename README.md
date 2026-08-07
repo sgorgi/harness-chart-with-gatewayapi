@@ -1,499 +1,283 @@
-# company-harness Gateway API generator
+# Harness 0.42.1 Gateway API generator
 
-This package generates Gateway API Helm templates from the Kubernetes `Ingress`
-and `Service` objects rendered by the complete `company-harness` umbrella chart.
+This repository is both:
 
-It does not inspect the internals of `charts/harness`. It runs `helm template`
-with the values files supplied on the command line, discovers the active source
-objects, and writes deterministic templates below `templates/`.
+1. a standalone Harness `0.42.1` rendering fixture; and
+2. a portable, single-file Gateway API generator intended to be copied into a
+   different umbrella-chart repository.
 
-The existing Ingress resources remain active. This allows the generated Gateway
-API resources to be tested in shadow mode before traffic is switched.
+The generator temporarily renders the chart's existing Ingress resources and
+converts their hosts, paths, Services, ports, TLS Secrets, and supported NGINX
+annotations into resources for Envoy Gateway `1.8.3`.
 
-## Expected repository layout
+## Integrating only the generator
+
+### Files to copy
+
+Copy exactly one executable file:
 
 ```text
-company-harness/
-├── Chart.yaml
-├── values-base.yaml
-├── values-prod.yaml
-├── values-ut.yaml
-├── charts/
-│   └── harness/
-│       └── Chart.yaml
-├── templates/
-└── scripts/
-    └── generate_gateway_api.sh
+scripts/render-gateway-api.sh
 ```
 
-The values files do not need to use these names and do not need to be in the
-chart directory. Every values file is supplied explicitly with `-f` or
-`--values`.
+The script is self-contained Bash. It has no Ruby or Python helper. It expects
+`helm`, Mike Farah `yq` v4, and `jq` to be installed.
 
-## Requirements
+Do **not** copy these fixture files into the consuming repository:
 
-The generator is intended for Linux and requires:
+```text
+Chart.yaml
+charts/
+generated/
+values-base.yaml
+values-ut.yaml
+values-prod.yaml
+values-metrics.yaml
+```
 
-* Bash 4 or newer
-* Helm 3
-* mikefarah/yq v4
-* GNU `sha256sum`, `install`, `cmp`, `diff`, `grep`, `sed` and `sort`
+The consuming repository should keep its own Chart, vendored/dependent Harness
+chart, and existing values files. The generated directory is reproducible output,
+not part of the portable generator.
 
-Python and `jq` are not required.
+### Shared values to copy
 
-## Gateway API values
+Copy the following `gatewayApi` key into the consuming repository's shared/base
+values file. Adjust `sourceIngress.enabledValuePath` to the chart structure:
 
-Only the Gateway API infrastructure settings need to be maintained manually.
-Merge the supplied base snippet into an appropriate values file:
+- an umbrella dependency named `harness`: `harness.global.ingress.enabled`
+- the Harness chart used directly: `global.ingress.enabled`
+- another dependency alias: `<alias>.global.ingress.enabled`
 
 ```yaml
-gatewayAPI:
-  enabled: false
-  environment: ""
+gatewayApi:
+  enabled: true
+  apiVersion: gateway.networking.k8s.io/v1
 
-  gateway:
-    name: apps-gateway
-    namespace: envoy-gateway-apps
+  sourceIngress:
+    forceEnabled: true
+    enabledValuePath: harness.global.ingress.enabled
+
+  provider: envoy-gateway
+  envoyGateway:
+    version: 1.8.3
+    httpRouteFilterApiVersion: gateway.envoyproxy.io/v1alpha1
+
+  parentGateway:
+    # The existing shared Gateway is the only generated-resource dependency
+    # outside the Harness release namespace.
+    name: shared-gateway
+    namespace: gateway-system
 
   listenerSet:
+    # Namespace is intentionally omitted. The generator always uses the
+    # effective Harness release namespace.
     name: harness
-    namespace: envoy-gateway-apps
+    http:
+      enabled: true
+      port: 80
+      redirectToHttps: true
+      redirectStatusCode: 301
+    https:
+      enabled: true
+      port: 443
 
   referenceGrant:
-    name: harness-gateway-tls
+    name: harness-listenerset-secrets
 
-  httpRedirect:
-    enabled: false
-    statusCode: 301
+  httpRoute:
+    maxRules: 16
+
+  commonLabels:
+    app.kubernetes.io/part-of: company-harness
+    app.kubernetes.io/managed-by: harness-gateway-generator
 ```
 
-Each release values chain must set the environment to the profile used when the
-template was generated. For example:
+Optionally add the release name to shared values. Otherwise pass `--release`:
 
 ```yaml
-# UT values
-gatewayAPI:
-  environment: ut
-  enabled: true
+deployment:
+  releaseName: harness
 ```
+
+The `deployment` key is generator input; Helm ignores it unless the consuming
+umbrella chart also defines templates that use it.
+
+### Environment-specific values to copy
+
+Add this shape to every environment values file. These are the values that should
+differ between UT, production, and future environments:
 
 ```yaml
-# Production values
-gatewayAPI:
-  environment: prod
-  enabled: true
+deployment:
+  namespace: harness-environment
+
+gatewayApi:
+  outputDirectory: generated/environment
+  listenerSet:
+    name: harness-environment
+  referenceGrant:
+    name: harness-environment-listenerset-secrets
 ```
 
-The generator does not modify these values files.
+`deployment.namespace` is the namespace used for the Helm render and for every
+generated Harness-side resource: ListenerSet, ReferenceGrant, redirect
+HTTPRoute, backend HTTPRoute, and Envoy HTTPRouteFilter. It can be overridden
+with `--namespace`; `gatewayApi.outputDirectory` can be overridden with
+`--output`.
 
-## Values-file precedence
+The shared Gateway name and namespace live only in shared/base values because
+they are common to UT and production in this setup. Override them in an
+environment file only if that environment actually uses a different Gateway.
 
-Pass the values files in the same order used for the real Helm release:
+### Existing Harness values to keep
 
-```bash
-./scripts/generate_gateway_api.sh ut \
+Do not copy the complete `harness:` blocks from this repository. They exist so
+this small fixture can render independently. The consuming repository should keep
+its existing upstream Harness values, but those values must result in rendered
+Ingresses containing the intended:
+
+- external hostname(s);
+- TLS Secret name(s);
+- backend Service names and ports; and
+- path and NGINX rewrite annotations.
+
+For this chart, the relevant upstream values happen to look like:
+
+```yaml
+harness:
+  global:
+    ingress:
+      enabled: false
+      hosts:
+        - harness-environment.example.com
+      tls:
+        enabled: true
+        secretName: harness-environment-tls
+    loadbalancerURL: https://harness-environment.example.com
+```
+
+Keep `ingress.enabled: false` for the real Gateway-only deployment. The generator
+temporarily overrides it to `true` while running `helm template`, extracts the
+Ingresses, and discards the temporary complete render. This repository's
+`harness.global.ingress.className`, `harness.global.gatewayAPI.enabled`, database
+defaults, and other chart values are fixture concerns rather than generator
+configuration.
+
+## Run the generator
+
+From the umbrella-chart root:
+
+```sh
+scripts/render-gateway-api.sh \
   -f values-base.yaml \
-  -f values-ut.yaml
+  -f values-environment.yaml
 ```
 
-The long form is equivalent:
+Values files use normal Helm precedence and may be repeated:
 
-```bash
-./scripts/generate_gateway_api.sh prod \
-  --values /srv/harness/common.yaml \
-  --values /srv/harness/region-eu.yaml \
-  --values /srv/harness/prod.yaml
-```
-
-Later files have higher precedence, matching normal Helm behavior. Relative
-values paths are resolved from the directory in which the script is executed.
-Absolute paths are supported.
-
-The script must be run once per profile. This is intentional because UT and
-production can use different values chains and different precedence:
-
-```bash
-./scripts/generate_gateway_api.sh ut \
+```sh
+scripts/render-gateway-api.sh \
   -f values-base.yaml \
-  -f values-ut.yaml
-
-./scripts/generate_gateway_api.sh prod \
-  -f values-base.yaml \
-  -f values-prod.yaml
+  -f values-environment.yaml \
+  -f values-local-overrides.yaml \
+  --chart . \
+  --namespace harness-custom \
+  --output generated/custom
 ```
 
-During discovery, the script appends:
+Use `--keep-rendered` only for diagnostics. The retained complete render contains
+the temporarily enabled source Ingresses and must not be applied as a Gateway-only
+deployment.
 
-```text
---set gatewayAPI.enabled=false
-```
+## Conversion behavior
 
-This prevents an existing generated template from participating in the source
-render. It does not disable the upstream Harness Ingress resources. All supplied
-values files otherwise retain their normal order and precedence.
+Harness 0.42.1 relies heavily on paths such as `/authz(/|$)(.*)` with
+`nginx.ingress.kubernetes.io/rewrite-target: /$2`. Standard Gateway API rewrites
+cannot substitute regex capture groups. Envoy Gateway `1.8.3` supports the
+`gateway.envoyproxy.io/v1alpha1` `HTTPRouteFilter` extension with
+`ReplaceRegexMatch`, so the generator produces one filter for each rewritten path.
 
-## Command-line interface
+It also:
 
-```text
-./scripts/generate_gateway_api.sh <profile> [options] [-f FILE ...]
-```
+- maps NGINX `proxy-read-timeout` to `HTTPRoute.rules[].timeouts.backendRequest`;
+- splits routes at the Gateway API limit of 16 rules per HTTPRoute;
+- resolves numeric and named Ingress Service ports;
+- creates HTTP-to-HTTPS redirect routes;
+- supports multiple values files, hosts, environments, and TLS Secrets; and
+- reports every untranslated NGINX annotation instead of silently dropping it.
 
-Useful options:
-
-```text
--f, --values FILE
---chart-dir PATH
---release NAME
---namespace NAME
---output-dir PATH
---diagnostics-dir PATH
---implementation-specific auto|regex|prefix|fail
---check
---strict-annotations
-```
-
-The profile is normally `ut` or `prod`, but any lowercase DNS-label-style name
-can be used.
+The default Harness NG fixture currently produces 30 Ingresses with 206 paths,
+38 backend HTTPRoutes, one redirect route, and 204 regex rewrite filters.
 
 ## Generated files
 
-For profile `ut`, the committed output is:
+Each configured output directory contains:
 
-```text
-templates/generated-gateway-api-ut.yaml
-```
+| File | Purpose | Apply? |
+| --- | --- | --- |
+| `ingresses.yaml` | Extracted source Ingresses for review | No |
+| `00-listener-set.yaml` | HTTP/HTTPS listeners, TLS refs, allowed routes | Yes |
+| `10-reference-grants.yaml` | Narrow Secret-access declaration in the Harness namespace | Yes |
+| `20-http-redirects.yaml` | HTTP-to-HTTPS redirect routes | Yes |
+| `30-http-routes.yaml` | Backend routes derived from Ingress rules | Yes |
+| `40-http-route-filters.yaml` | Envoy regex capture/rewrite filters | Yes |
+| `all.yaml` | All directly applicable generated resources | Yes |
+| `gateway-allowed-listeners-patch.yaml` | Merge patch for the existing Gateway | Separately |
+| `report.txt` | Counts, selected parents/namespaces, warnings | Review |
 
-For profile `prod`:
+## Namespace and cross-namespace attachment
 
-```text
-templates/generated-gateway-api-prod.yaml
-```
-
-Diagnostic output is written below:
-
-```text
-.generated/gateway-api/<profile>/active-ingresses.yaml
-.generated/gateway-api/<profile>/active-services.yaml
-.generated/gateway-api/<profile>/ingress-annotations.json
-.generated/gateway-api/<profile>/values-files.txt
-```
-
-Each generated template is guarded by:
-
-```gotemplate
-{{- if and
-      (default false .Values.gatewayAPI.enabled)
-      (eq (default "" .Values.gatewayAPI.environment) "ut")
-}}
-```
-
-Both generated files can therefore remain under `templates/`. Only the file for
-the selected environment is rendered by Helm.
-
-## Generated resources
-
-The generator creates:
-
-* one `ListenerSet`
-* one HTTPS listener per discovered TLS hostname
-* one `HTTPRoute` per source Ingress and hostname
-* one restricted `ReferenceGrant` for the discovered TLS Secrets
-* `HTTPRouteFilter` resources for supported regex rewrites
-* optional port 80 listeners and HTTP-to-HTTPS redirect routes
-
-The mapping is derived from the rendered Kubernetes objects:
-
-| Ingress property | Generated property |
-|---|---|
-| Rule hostname | Listener and HTTPRoute hostname |
-| TLS Secret | ListenerSet `certificateRefs` |
-| `Prefix` path | HTTPRoute `PathPrefix` |
-| `Exact` path | HTTPRoute `Exact` |
-| Regex path | HTTPRoute `RegularExpression` |
-| Backend Service | HTTPRoute `backendRefs.name` |
-| Numeric Service port | HTTPRoute `backendRefs.port` |
-| Named Service port | Resolved from the rendered Service |
-| Fixed rewrite target | Core `URLRewrite` with `ReplaceFullPath` |
-| Capture-group rewrite | Envoy Gateway `HTTPRouteFilter` |
-
-## Cross-namespace TLS model
-
-The default values create this relationship:
-
-| Resource | Namespace |
-|---|---|
-| Parent Gateway | `envoy-gateway-apps` |
-| ListenerSet | `envoy-gateway-apps` |
-| HTTPRoutes | Harness release namespace |
-| TLS Secrets | Harness release namespace |
-| ReferenceGrant | Harness release namespace |
-
-The ListenerSet explicitly references each TLS Secret in the Harness namespace.
-The generated `ReferenceGrant` authorizes only those discovered Secret names.
-
-The parent Gateway must permit ListenerSets from the ListenerSet namespace. The
-ListenerSet permits the generated HTTPRoutes from the Harness namespace.
-
-## Named Service ports
-
-An Ingress may reference a named Service port:
+The ListenerSet, HTTPRoutes, Envoy HTTPRouteFilters, ReferenceGrant, Services,
+and TLS Secret all live in the effective Harness release namespace. The only
+cross-namespace relationship is the ListenerSet's `parentRef` to the existing
+shared Gateway:
 
 ```yaml
-backend:
-  service:
-    name: harness-manager
-    port:
-      name: http
-```
-
-Gateway API requires the Service port number. The generator resolves the name
-against the Services from the same umbrella-chart render:
-
-```yaml
-backendRefs:
-  - name: harness-manager
-    port: 9090
-```
-
-Generation fails when the port cannot be resolved uniquely.
-
-## ImplementationSpecific paths
-
-Kubernetes deliberately leaves `ImplementationSpecific` path behavior to the
-Ingress controller. It cannot always be translated safely without controller
-context.
-
-The default mode is:
-
-```text
---implementation-specific auto
-```
-
-For ingress-nginx, the generator performs a host-wide pre-scan:
-
-* `nginx.ingress.kubernetes.io/use-regex: "true"` enables regex mode.
-* `nginx.ingress.kubernetes.io/rewrite-target` also enables regex mode.
-* ingress-nginx applies that regex mode to all paths for the same hostname.
-* an `ImplementationSpecific` path containing obvious regex characters is
-  treated as a regex even when the annotation is absent.
-* a literal `ImplementationSpecific` path is treated as `PathPrefix`.
-
-Other modes are available:
-
-| Mode | Behavior |
-|---|---|
-| `auto` | Infer regex behavior, otherwise use `PathPrefix` |
-| `regex` | Treat every `ImplementationSpecific` path as regex |
-| `prefix` | Use `PathPrefix` unless host-wide ingress-nginx regex mode is explicit |
-| `fail` | Reject every `ImplementationSpecific` path |
-
-### Example: Harness authz path
-
-This Ingress path:
-
-```yaml
-path: /authz(/|$)(.*)
-pathType: ImplementationSpecific
-```
-
-is generated as a case-insensitive RE2-compatible match:
-
-```yaml
-matches:
-  - path:
-      type: RegularExpression
-      value: "(?i)^/authz(/|$)(.*)"
-```
-
-The `(?i)` flag preserves ingress-nginx case-insensitive regex behavior. The `^`
-anchor preserves its start-of-path behavior.
-
-## nginx rewrite-target conversion
-
-The following common ingress-nginx combination is translated automatically:
-
-```yaml
-metadata:
-  annotations:
-    nginx.ingress.kubernetes.io/use-regex: "true"
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
 spec:
-  rules:
-    - http:
-        paths:
-          - path: /authz(/|$)(.*)
-            pathType: ImplementationSpecific
+  parentRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: shared-gateway
+    namespace: gateway-system
 ```
 
-The generator creates an Envoy Gateway `HTTPRouteFilter` similar to:
+HTTPRoutes attach locally to the ListenerSet and `allowedRoutes.namespaces.from`
+defaults to `Same`. The TLS certificate reference is local too, so Gateway API
+does not require a ReferenceGrant for Secret access. The generator still emits
+the requested narrowly scoped ReferenceGrant in the Harness namespace; it does
+not authorize the ListenerSet-to-Gateway attachment and is redundant while the
+ListenerSet and Secret remain colocated.
 
-```yaml
-apiVersion: gateway.envoyproxy.io/v1alpha1
-kind: HTTPRouteFilter
-spec:
-  urlRewrite:
-    path:
-      type: ReplaceRegexMatch
-      replaceRegexMatch:
-        pattern: "(?i)^/authz(/|$)(.*)"
-        substitution: "/\\2"
+The existing Gateway authorizes the cross-namespace ListenerSet through
+`allowedListeners`. Review the generated patch because applying it replaces the
+Gateway's current `allowedListeners` block:
+
+```sh
+kubectl patch gateway shared-gateway \
+  --namespace gateway-system \
+  --type merge \
+  --patch-file generated/environment/gateway-allowed-listeners-patch.yaml
+
+kubectl apply --server-side --filename generated/environment/all.yaml
 ```
 
-and references it from the matching HTTPRoute rule.
+Before moving traffic, verify that the ListenerSet and every HTTPRoute report
+positive `Accepted`, `Programmed`, and `ResolvedRefs` conditions and test
+representative UI, API, streaming, and long-running Harness paths.
 
-Numeric NGINX capture references such as `$1`, `$2` and `$3` are converted to
-Envoy substitutions such as `\1`, `\2` and `\3`. Unsupported `$` expressions
-cause generation to fail rather than produce a different route.
+## Envoy Gateway 1.8.3 prerequisites
 
-A rewrite target without capture references is translated to the core Gateway
-API `URLRewrite` filter with `ReplaceFullPath`.
-
-## Regex limitations
-
-Ingress-nginx path expressions and Envoy Gateway regex features both use
-RE2-compatible syntax in the supported migration path. Even so, regex route
-precedence is implementation-specific in Gateway API, especially when multiple
-HTTPRoutes for the same hostname contain overlapping regular expressions.
-
-Review and test overlapping paths carefully. The generator orders paths by
-source-path length within each generated HTTPRoute, matching ingress-nginx's
-longer-path-first approach as closely as possible.
-
-Do not disable the existing Ingress until the generated routes have an accepted
-status and direct traffic tests confirm matching and rewrite behavior.
-
-## Other Ingress annotations
-
-The generator translates these ingress-nginx annotations:
+Envoy Gateway `1.8.3` expects compatible Gateway API and Envoy Gateway CRDs. Its
+published installation includes the required CRDs; if CRDs are managed separately,
+upgrade them before the controller. The generator targets:
 
 ```text
-nginx.ingress.kubernetes.io/use-regex
-nginx.ingress.kubernetes.io/rewrite-target
+ListenerSet / HTTPRoute / ReferenceGrant: gateway.networking.k8s.io/v1
+HTTPRouteFilter:                         gateway.envoyproxy.io/v1alpha1
 ```
 
-Other controller-specific annotations are not translated automatically.
-Examples include:
+Relevant upstream documentation:
 
-```text
-nginx.ingress.kubernetes.io/proxy-read-timeout
-nginx.ingress.kubernetes.io/proxy-body-size
-nginx.ingress.kubernetes.io/backend-protocol
-nginx.ingress.kubernetes.io/auth-url
-```
-
-The diagnostic annotation report separates translated and untranslated values:
-
-```json
-{
-  "access-control-services|example.company.ch": {
-    "translated": {
-      "nginx.ingress.kubernetes.io/use-regex": "true",
-      "nginx.ingress.kubernetes.io/rewrite-target": "/$2"
-    },
-    "untranslated": {}
-  }
-}
-```
-
-Use strict validation after all remaining annotations have been migrated:
-
-```bash
-./scripts/generate_gateway_api.sh ut \
-  -f values-base.yaml \
-  -f values-ut.yaml \
-  --check \
-  --strict-annotations
-```
-
-Translated `use-regex` and `rewrite-target` annotations do not cause strict mode
-to fail. Other controller-specific annotations do.
-
-## Upgrade and GitOps workflow
-
-Generate and commit one template per values chain:
-
-```bash
-./scripts/generate_gateway_api.sh ut \
-  -f values-base.yaml \
-  -f values-ut.yaml
-
-git diff -- templates/generated-gateway-api-ut.yaml
-```
-
-After every relevant Harness chart or values change, CI should rerun the exact
-same command with `--check`:
-
-```bash
-./scripts/generate_gateway_api.sh ut \
-  -f values-base.yaml \
-  -f values-ut.yaml \
-  --check
-```
-
-`--check` does not modify the committed template. It prints a unified diff and
-exits with status 1 when the active Ingress model no longer matches the generated
-Gateway API template.
-
-This pre-generation step is required because one Helm template cannot inspect
-the already rendered manifests of a dependency during the same Helm render.
-
-## Final umbrella-chart render
-
-After generation, render the umbrella chart with the same values chain:
-
-```bash
-helm template harness . \
-  --namespace harness \
-  -f values-base.yaml \
-  -f values-ut.yaml \
-  > rendered-ut.yaml
-```
-
-Inspect the transition resources:
-
-```bash
-yq eval 'select(
-  .kind == "ListenerSet" or
-  .kind == "HTTPRoute" or
-  .kind == "HTTPRouteFilter" or
-  .kind == "ReferenceGrant"
-)' rendered-ut.yaml
-```
-
-Validate against a cluster containing the Gateway API and Envoy Gateway CRDs:
-
-```bash
-kubectl apply --server-side --dry-run=server -f rendered-ut.yaml
-```
-
-After deployment:
-
-```bash
-kubectl get listenerset -n envoy-gateway-apps
-kubectl get httproute,httproutefilter -n harness
-kubectl get referencegrant -n harness
-kubectl describe httproute -n harness
-```
-
-## Shadow-mode traffic test
-
-Keep the existing Ingress resources enabled. Test Envoy directly before changing
-DNS:
-
-```bash
-curl --resolve harness.example.com:443:<ENVOY_IP> \
-  https://harness.example.com/
-```
-
-For the regex example, test all relevant shapes:
-
-```bash
-curl --resolve example.company.ch:443:<ENVOY_IP> \
-  https://example.company.ch/authz
-
-curl --resolve example.company.ch:443:<ENVOY_IP> \
-  https://example.company.ch/authz/
-
-curl --resolve example.company.ch:443:<ENVOY_IP> \
-  https://example.company.ch/authz/example
-```
+- [Envoy Gateway 1.8.3 installation and CRDs](https://gateway.envoyproxy.io/v1.8/install/install-yaml/)
+- [Envoy Gateway 1.8 regex URL rewrites](https://gateway.envoyproxy.io/v1.8/tasks/traffic/http-urlrewrite/)
+- [Gateway API ListenerSet attachment](https://gateway-api.sigs.k8s.io/guides/user-guides/listener-set/)

@@ -1,0 +1,6 @@
+# Optional third layer; pass it with another -f when Harness monitoring should
+# be rendered for an environment.
+harness:
+  global:
+    monitoring:
+      enabled: true

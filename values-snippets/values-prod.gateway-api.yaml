@@ -1,6 +1,0 @@
-# Merge this block into whichever values chain represents production.
-gatewayAPI:
-  environment: prod
-
-  # Enable after production shadow-mode validation.
-  enabled: false
