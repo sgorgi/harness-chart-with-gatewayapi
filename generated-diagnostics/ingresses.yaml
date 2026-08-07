@@ -1,0 +1,2010 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: access-control-service
+  namespace: harness-prod
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: harness
+  rules:
+    - host: harness.example.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: access-control
+                port:
+                  number: 9006
+            path: /authz(/|$)(.*)
+            pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - harness.example.com
+      secretName: harness-prod-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: resource-group-acs
+  namespace: harness-prod
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: harness
+  rules:
+    - host: harness.example.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: access-control
+                port:
+                  number: 9006
+            path: /resourcegroup(/|$)(.*)
+            pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - harness.example.com
+      secretName: harness-prod-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: access-control-v1-apis
+  namespace: harness-prod
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/rewrite-target: /api/$1
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: harness
+  rules:
+    - host: harness.example.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: access-control
+                port:
+                  number: 9006
+            path: /(v1/roles)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: access-control
+                port:
+                  number: 9006
+            path: /(v1/roles/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: access-control
+                port:
+                  number: 9006
+            path: /(v1/orgs/.+/roles)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: access-control
+                port:
+                  number: 9006
+            path: /(v1/orgs/.+/roles/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: access-control
+                port:
+                  number: 9006
+            path: /(v1/orgs/.+/projects/.+/roles)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: access-control
+                port:
+                  number: 9006
+            path: /(v1/orgs/.+/projects/.+/roles/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: access-control
+                port:
+                  number: 9006
+            path: /(v1/role-assignments)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: access-control
+                port:
+                  number: 9006
+            path: /(v1/role-assignments/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: access-control
+                port:
+                  number: 9006
+            path: /(v1/orgs/.+/role-assignments)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: access-control
+                port:
+                  number: 9006
+            path: /(v1/orgs/.+/role-assignments/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: access-control
+                port:
+                  number: 9006
+            path: /(v1/orgs/.+/projects/.+/role-assignments)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: access-control
+                port:
+                  number: 9006
+            path: /(v1/orgs/.+/projects/.+/role-assignments/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: access-control
+                port:
+                  number: 9006
+            path: /(v1/orgs/.+/projects/.+/analyze-access-policies)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: access-control
+                port:
+                  number: 9006
+            path: /(v1/orgs/.+/analyze-access-policies)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: access-control
+                port:
+                  number: 9006
+            path: /(v1/analyze-access-policies)
+            pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - harness.example.com
+      secretName: harness-prod-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: change-data-capture-0
+  namespace: harness-prod
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: harness
+  rules:
+    - host: harness.example.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: change-data-capture
+                port:
+                  number: 8190
+            path: /cdc(/|$)(.*)
+            pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - harness.example.com
+      secretName: harness-prod-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: delegate-proxy
+  namespace: harness-prod
+  annotations: null
+spec:
+  ingressClassName: harness
+  rules:
+    - host: harness.example.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: delegate-proxy
+                port:
+                  number: 80
+            path: /storage
+            pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - harness.example.com
+      secretName: harness-prod-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gateway-0
+  namespace: harness-prod
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: harness
+  rules:
+    - host: harness.example.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: gateway
+                port:
+                  number: 80
+            path: /gateway/(.*)
+            pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - harness.example.com
+      secretName: harness-prod-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: harness-manager-api
+  namespace: harness-prod
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/rewrite-target: /api$1$2
+spec:
+  ingressClassName: harness
+  rules:
+    - host: harness.example.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: harness-manager
+                port:
+                  number: 9090
+            path: /api(/|$)(.*)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: harness-manager
+                port:
+                  number: 9999
+            path: /api/swagger(/|$)(.*)
+            pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - harness.example.com
+      secretName: harness-prod-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: harness-manager-stream
+  namespace: harness-prod
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /stream$1$2
+spec:
+  ingressClassName: harness
+  rules:
+    - host: harness.example.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: harness-manager
+                port:
+                  number: 9090
+            path: /stream(/|$)(.*)
+            pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - harness.example.com
+      secretName: harness-prod-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: log-service-0
+  namespace: harness-prod
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: harness
+  rules:
+    - host: harness.example.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: log-service
+                port:
+                  number: 8079
+            path: /log-service(/|$)(.*)
+            pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - harness.example.com
+      secretName: harness-prod-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: next-gen-ui-0
+  namespace: harness-prod
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: harness
+  rules:
+    - host: harness.example.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: next-gen-ui
+                port:
+                  number: 80
+            path: /ng(/|$)(.*)
+            pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - harness.example.com
+      secretName: harness-prod-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: harness-ui
+  namespace: harness-prod
+  labels:
+    helm.sh/chart: next-gen-ui-1.137.8
+    app.kubernetes.io/name: next-gen-ui
+    app.kubernetes.io/instance: harness
+    app.kubernetes.io/version: 0.353.10
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ingressClassName: harness
+  rules:
+    - host: harness.example.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: next-gen-ui
+                port:
+                  number: 80
+            path: /
+            pathType: Prefix
+  tls:
+    - hosts:
+        - harness.example.com
+      secretName: harness-prod-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ng-auth-ui-0
+  namespace: harness-prod
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: harness
+  rules:
+    - host: harness.example.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: ng-auth-ui
+                port:
+                  number: 80
+            path: /auth(/|$)(.*)
+            pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - harness.example.com
+      secretName: harness-prod-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ng-dashboard-aggregator-0
+  namespace: harness-prod
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: harness
+  rules:
+    - host: harness.example.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: ng-dashboard-aggregator
+                port:
+                  number: 7100
+            path: /ng-dashboard/api(/|$)(.*)
+            pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - harness.example.com
+      secretName: harness-prod-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: harness-manager-ng-delegate-token
+  namespace: harness-prod
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/rewrite-target: /api/delegate-token-ng$1$2
+spec:
+  ingressClassName: harness
+  rules:
+    - host: harness.example.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: harness-manager
+                port:
+                  number: 9090
+            path: /ng/api/delegate-token-ng(/|$)(.*)
+            pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - harness.example.com
+      secretName: harness-prod-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: harness-manager-ng-delegate-download
+  namespace: harness-prod
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/rewrite-target: /api/download-delegates$1$2
+spec:
+  ingressClassName: harness
+  rules:
+    - host: harness.example.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: harness-manager
+                port:
+                  number: 9090
+            path: /ng/api/download-delegates(/|$)(.*)
+            pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - harness.example.com
+      secretName: harness-prod-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: harness-manager-ng-delegate-setup
+  namespace: harness-prod
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/rewrite-target: /api/delegate-setup$1$2
+spec:
+  ingressClassName: harness
+  rules:
+    - host: harness.example.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: harness-manager
+                port:
+                  number: 9090
+            path: /ng/api/delegate-setup(/|$)(.*)
+            pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - harness.example.com
+      secretName: harness-prod-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: harness-manager-ng-delegate-group-tags
+  namespace: harness-prod
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/rewrite-target: /api/delegate-group-tags$1$2
+spec:
+  ingressClassName: harness
+  rules:
+    - host: harness.example.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: harness-manager
+                port:
+                  number: 9090
+            path: /ng/api/delegate-group-tags(/|$)(.*)
+            pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - harness.example.com
+      secretName: harness-prod-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: harness-manager-ng-agent-mtls
+  namespace: harness-prod
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/rewrite-target: /api/agent/mtls$1$2
+spec:
+  ingressClassName: harness
+  rules:
+    - host: harness.example.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: harness-manager
+                port:
+                  number: 9090
+            path: /ng/api/agent/mtls(/|$)(.*)
+            pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - harness.example.com
+      secretName: harness-prod-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ng-manager
+  namespace: harness-prod
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: harness
+  rules:
+    - host: harness.example.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /ng/api(/|$)(.*)
+            pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - harness.example.com
+      secretName: harness-prod-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ng-manager-v1-apis
+  namespace: harness-prod
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+spec:
+  ingressClassName: harness
+  rules:
+    - host: harness.example.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/projects)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/projects/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/secrets)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/secrets/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/secrets)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/secrets/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/projects/.+/secrets)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/projects/.+/secrets/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/connectors)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/connectors/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/connectors)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/connectors/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/projects/.+/connectors)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/projects/.+/connectors/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/services)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/services/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/services)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/services/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/projects/.+/services)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/projects/.+/services/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/deployables)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/deployables/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/deployables)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/deployables/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/projects/.+/deployables)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/projects/.+/deployables/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/projects/.+/salesforce-comparison-pairs)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/projects/.+/salesforce-comparison-pairs/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/projects/.+/salesforce-changesets)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/projects/.+/salesforce-changesets/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/projects/.+/salesforce-executions)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/projects/.+/salesforce-executions/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/projects/.+/salesforce/execute)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/projects/.+/salesforce/default-pipelines)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/projects/.+/salesforce/pipeline-mappings)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/dashboard/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/dashboard/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/projects/.+/dashboard/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/environments)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/environments/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/environments)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/environments/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/projects/.+/environments)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/projects/.+/environments/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/ip-allowlist)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/ip-allowlist/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/favorites)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/favorites/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/eula/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/gitx-webhooks/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/gitx-webhooks)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/gitx-webhook-events)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/gitx-webhook-events/list-branches)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/gitx-webhook-events/.+/validation-info)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/certificates)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/certificates/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/certificates)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/certificates/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/projects/.+/certificates)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/projects/.+/certificates/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/rancher/connectors/.+/clusters)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/rancher/connectors/.+/clusters)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/projects/.+/rancher/connectors/.+/clusters)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/rancher/environments/.+/infrastructure-definitions/.+/clusters)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/rancher/environments/.+/infrastructure-definitions/.+/clusters)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/projects/.+/rancher/environments/.+/infrastructure-definitions/.+/clusters)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/ldap-settings)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/ldap-settings/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/licenseUsageActivity/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/devSubscriptions)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/moduleLicenseUtilization)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/updateModuleAccess)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/moduleAccess/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/listPrincipalsWithAccess)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/creditOverUsage/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/credits/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/webhooks)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/webhooks)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/projects/.+/webhooks)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/webhooks/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/webhooks/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/projects/.+/webhooks/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/create-webhooks)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/create-webhooks)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/projects/.+/create-webhooks)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/webhooks/list)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/webhooks/list)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/orgs/.+/projects/.+/webhooks/list)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/licensedModules)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/dailyModuleAccountAccess)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/banners)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/banners/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/branding)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/branding/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/oidc-provider)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/oidc-provider/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/subscription/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/subscription/devops/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: ng-manager
+                port:
+                  number: 7090
+            path: /(v1/kubernetes/releases/.+)
+            pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - harness.example.com
+      secretName: harness-prod-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pipeline-service
+  namespace: harness-prod
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: harness
+  rules:
+    - host: harness.example.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: pipeline-service
+                port:
+                  number: 12001
+            path: /pipeline(/|$)(.*)
+            pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - harness.example.com
+      secretName: harness-prod-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pipeline-service-v1-apis
+  namespace: harness-prod
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/rewrite-target: /api/$1
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: harness
+  rules:
+    - host: harness.example.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: pipeline-service
+                port:
+                  number: 12001
+            path: /(v1/orgs/.+/projects/.+/pipelines.*)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: pipeline-service
+                port:
+                  number: 12001
+            path: /(v1/orgs/.+/projects/.+/input-sets.*)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: pipeline-service
+                port:
+                  number: 12001
+            path: /(v1/pipeline-schema.*)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: pipeline-service
+                port:
+                  number: 12001
+            path: /(v1/orgs/.+/projects/.+/pipelines/.+/execute/stages-execution-list)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: pipeline-service
+                port:
+                  number: 12001
+            path: /(v1/orgs/.+/projects/.+/pipelines/.+/execute/stages)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: pipeline-service
+                port:
+                  number: 12001
+            path: /(v1/orgs/.+/projects/.+/pipelines/.+/execute/dynamic)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: pipeline-service
+                port:
+                  number: 12001
+            path: /(v1/orgs/.+/projects/.+/pipelines/.+/execute/notification-rules/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: pipeline-service
+                port:
+                  number: 12001
+            path: /(v1/orgs/.+/projects/.+/pipelines/.+/execute)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: pipeline-service
+                port:
+                  number: 12001
+            path: /(v1/step-pallete)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: pipeline-service
+                port:
+                  number: 12001
+            path: /(v1/triggers/catalog)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: pipeline-service
+                port:
+                  number: 12001
+            path: /(v1/orgs/.+/projects/.+/approvals/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: pipeline-service
+                port:
+                  number: 12001
+            path: /(v1/orgs/.+/projects/.+/pipelines/.+/triggers)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: pipeline-service
+                port:
+                  number: 12001
+            path: /(v1/orgs/.+/projects/.+/pipelines/.+/triggers/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: pipeline-service
+                port:
+                  number: 12001
+            path: /(v1/orgs/.+/projects/.+/execution/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: pipeline-service
+                port:
+                  number: 12001
+            path: /(v1/orgs/.+/projects/.+/pipelines/.+/execute/.+/retry-stages)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: pipeline-service
+                port:
+                  number: 12001
+            path: /(v1/conversion.*)
+            pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - harness.example.com
+      secretName: harness-prod-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: notification-service
+  namespace: harness-prod
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: harness
+  rules:
+    - host: harness.example.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /notifications(/|$)(.*)
+            pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - harness.example.com
+      secretName: harness-prod-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: audit-service
+  namespace: harness-prod
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: harness
+  rules:
+    - host: harness.example.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /audit(/|$)(.*)
+            pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - harness.example.com
+      secretName: harness-prod-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: streaming-manager-service
+  namespace: harness-prod
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: harness
+  rules:
+    - host: harness.example.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /streaming-manager-service(/|$)(.*)
+            pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - harness.example.com
+      secretName: harness-prod-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: platform-service-v1-apis
+  namespace: harness-prod
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /api/$1
+spec:
+  ingressClassName: harness
+  rules:
+    - host: harness.example.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/resource-groups)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/resource-groups/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/orgs/.+/resource-groups)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/orgs/.+/resource-groups/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/orgs/.+/projects/.+/resource-groups)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/orgs/.+/projects/.+/resource-groups/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/streaming-destinations)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/streaming-destinations/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/orgs/.+/projects/.+/notification-channels/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/orgs/.+/projects/.+/notification-channels)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/orgs/.+/notification-channels/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/orgs/.+/notification-channels)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/notification-channels/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/notification-channels)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/orgs/.+/projects/.+/notification-rules/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/orgs/.+/projects/.+/notification-rules)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/orgs/.+/notification-rules/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/orgs/.+/notification-rules)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/notification-rules/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/notification-rules)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/validate-channels/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/validate-rules/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/orgs/.+/validate-channels/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/orgs/.+/validate-rules/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/orgs/.+/projects/.+/validate-channels/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/orgs/.+/projects/.+/validate-rules/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/notification-resource-list)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/attachments)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/default-notification-template-set)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/default-notification-template-set/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/orgs/.+/default-notification-template-set)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/orgs/.+/default-notification-template-set/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/orgs/.+/projects/.+/default-notification-template-set)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/orgs/.+/projects/.+/default-notification-template-set/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/data-sinks)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/data-sinks/validate-unique-identifier/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/data-sinks/.+)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/alerts/unread-count)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/alerts/status/mark-all-read)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/alerts/.+/details)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/alerts/.+/status)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/alerts)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: platform-service
+                port:
+                  number: 9005
+            path: /(v1/alert-settings)
+            pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - harness.example.com
+      secretName: harness-prod-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: policy-mgmt-0
+  namespace: harness-prod
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "1800"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "1800"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: harness
+  rules:
+    - host: harness.example.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: policy-mgmt
+                port:
+                  number: 3000
+            path: /pm(/|$)(.*)
+            pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - harness.example.com
+      secretName: harness-prod-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: queue-service-0
+  namespace: harness-prod
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "1800"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: harness
+  rules:
+    - host: harness.example.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: queue-service
+                port:
+                  number: 9091
+            path: /queue-service(/|$)(.*)
+            pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - harness.example.com
+      secretName: harness-prod-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: template-service-0
+  namespace: harness-prod
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: harness
+  rules:
+    - host: harness.example.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: template-service
+                port:
+                  number: 15002
+            path: /template(/|$)(.*)
+            pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - harness.example.com
+      secretName: harness-prod-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: template-service-smp-v1-apis
+  namespace: harness-prod
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /api/$1
+spec:
+  ingressClassName: harness
+  rules:
+    - host: harness.example.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: template-service
+                port:
+                  number: 15002
+            path: /(v1/templates(/.*)?)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: template-service
+                port:
+                  number: 15002
+            path: /(v1/orgs/[^/]+/templates(/.*)?)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: template-service
+                port:
+                  number: 15002
+            path: /(v1/orgs/[^/]+/projects/[^/]+/templates(/.*)?)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: template-service
+                port:
+                  number: 15002
+            path: /(v1/template-schema(/.*)?)
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: template-service
+                port:
+                  number: 15002
+            path: /(v1/common/templates(/.*)?)
+            pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - harness.example.com
+      secretName: harness-prod-tls

@@ -1,0 +1,22 @@
+Harness Ingress to Gateway API conversion report
+
+Source render: rendered-helm.yaml
+Ingress resources: 30
+Ingress paths / generated backend rules: 206
+ListenerSet listeners: 2
+ReferenceGrants: 1
+HTTP redirect routes: 1
+Backend HTTPRoutes: 38
+Envoy HTTPRouteFilters: 204
+
+Envoy Gateway target: 1.8.3
+Parent Gateway: gateway-system/shared-gateway
+ListenerSet: harness-prod/harness
+Route namespaces: harness-prod
+
+Warnings:
+- harness-prod/policy-mgmt-0: annotation nginx.ingress.kubernetes.io/proxy-send-timeout was not translated
+
+The shared Gateway allowedListeners patch is diagnostic output; review and apply it separately.
+
+Copy every YAML file from the template output directory into the umbrella chart templates directory.

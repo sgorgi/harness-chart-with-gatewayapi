@@ -1,5 +1,6 @@
-# GENERATOR INPUT (portable, environment-specific): copy this deployment key and
-# the gatewayApi key below to the consuming repository's environment values.
+# GENERATOR-ONLY SOURCE RENDER INPUT: the reusable templates use
+# .Release.Namespace at deployment time. This value only selects the namespace
+# for the temporary Ingress render and can instead be passed with --namespace.
 deployment:
   namespace: harness-prod
 
@@ -15,10 +16,3 @@ harness:
       tls:
         secretName: harness-prod-tls
     loadbalancerURL: https://harness.example.com
-
-gatewayApi:
-  outputDirectory: generated/prod
-  listenerSet:
-    name: harness-prod
-  referenceGrant:
-    name: harness-prod-listenerset-secrets

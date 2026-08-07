@@ -1,0 +1,7 @@
+spec:
+  allowedListeners:
+    namespaces:
+      from: Selector
+      selector:
+        matchLabels:
+          gateway-api.harness.io/allowed: "true"

@@ -14,7 +14,8 @@ Usage:
 
 Options:
   -f, --values FILE       Helm values layer; may be repeated (required)
-  -o, --output DIR        Output directory; overrides gatewayApi.outputDirectory
+  -o, --output DIR        Helm-template output; overrides gatewayApi.outputDirectory
+      --diagnostics DIR   Diagnostic output; overrides gatewayApi.diagnosticsDirectory
       --chart DIR         Umbrella chart directory (default: repository root)
       --release NAME      Helm release name; overrides deployment.releaseName
       --namespace NAME    Render namespace; overrides deployment.namespace
@@ -29,6 +30,7 @@ EOF
 values_files=()
 chart_dir="$repo_root"
 output_dir=""
+diagnostics_dir=""
 release_name=""
 namespace=""
 keep_rendered=false
@@ -43,6 +45,11 @@ while (($#)); do
     -o|--output)
       (($# >= 2)) || { echo "error: $1 requires a directory" >&2; exit 2; }
       output_dir="$2"
+      shift 2
+      ;;
+    --diagnostics)
+      (($# >= 2)) || { echo "error: $1 requires a directory" >&2; exit 2; }
+      diagnostics_dir="$2"
       shift 2
       ;;
     --chart)
@@ -131,16 +138,22 @@ fi
 if [[ -z "$output_dir" ]]; then
   output_dir=$(config_value '.gatewayApi.outputDirectory')
 fi
+if [[ -z "$diagnostics_dir" ]]; then
+  diagnostics_dir=$(config_value '.gatewayApi.diagnosticsDirectory')
+fi
 
 [[ -n "$release_name" ]] || release_name=company-harness
 [[ -n "$namespace" ]] || { echo "error: deployment.namespace is required (or use --namespace)" >&2; exit 1; }
 [[ -n "$output_dir" ]] || { echo "error: gatewayApi.outputDirectory is required (or use --output)" >&2; exit 1; }
+[[ -n "$diagnostics_dir" ]] || diagnostics_dir="${output_dir%/}-diagnostics"
 
 for required_path in \
   '.gatewayApi.parentGateway.name' \
   '.gatewayApi.parentGateway.namespace' \
   '.gatewayApi.listenerSet.name' \
-  '.gatewayApi.referenceGrant.name'; do
+  '.gatewayApi.referenceGrant.name' \
+  '.gatewayApi.runtimeValues.hostsPath' \
+  '.gatewayApi.runtimeValues.tlsSecretNamePath'; do
   [[ -n "$(config_value "$required_path")" ]] || {
     echo "error: required value is missing: ${required_path#.}" >&2
     exit 1
@@ -166,7 +179,11 @@ fi
 if [[ "$output_dir" != /* ]]; then
   output_dir="$repo_root/$output_dir"
 fi
+if [[ "$diagnostics_dir" != /* ]]; then
+  diagnostics_dir="$repo_root/$diagnostics_dir"
+fi
 mkdir -p "$output_dir"
+mkdir -p "$diagnostics_dir"
 
 rendered_file="$temporary_dir/rendered-helm.yaml"
 helm_args=(template "$release_name" "$chart_dir" --namespace "$namespace" --skip-tests)
@@ -614,6 +631,8 @@ jq --null-input \
         parentGateway: "\($parent_gateway_namespace)/\($parent_gateway_name)",
         listenerSet: "\($listener_set_namespace)/\($listener_set_name)",
         routeNamespaces: $route_namespaces,
+        sourceHosts: $hosts,
+        sourceTlsSecrets: ($all_tls_refs | map(.name) | unique),
         listenerCount: ($listeners | length),
         envoyGatewayVersion: ($config.gatewayApi.envoyGateway.version // "unspecified")
       }
@@ -639,24 +658,191 @@ jq --exit-status --arg namespace "$namespace" '
   exit 1
 }
 
+templates_json="$temporary_dir/generated-helm-templates.json"
+jq \
+  --slurpfile values "$values_json" '
+  def path_parts($path):
+    $path | split(".") | map(select(length > 0));
+
+  def value_at_path($object; $path):
+    $object | getpath(path_parts($path));
+
+  def helm_index_arguments($path):
+    path_parts($path) | map(@json) | join(" ");
+
+  def helm_required_value($path; $message):
+    ($message | @json) as $quoted_message
+    | "{{ required \($quoted_message) (index .Values \(helm_index_arguments($path))) }}";
+
+  def helm_required_list_item($path; $message; $index):
+    ($message | @json) as $quoted_message
+    | "{{ index (required \($quoted_message) (index .Values \(helm_index_arguments($path)))) \($index) }}";
+
+  . as $result
+  | ($values[0]) as $config
+  | ($config.gatewayApi.runtimeValues.hostsPath) as $hosts_path
+  | ($config.gatewayApi.runtimeValues.tlsSecretNamePath) as $tls_secret_path
+  | (value_at_path($config; $hosts_path)) as $configured_hosts
+  | (value_at_path($config; $tls_secret_path)) as $configured_tls_secret
+  | ($result.context.sourceHosts) as $source_hosts
+  | ($result.context.sourceTlsSecrets) as $source_tls_secrets
+  | if ($configured_hosts | type) != "array" or ($configured_hosts | length) == 0 then
+      error("gatewayApi.runtimeValues.hostsPath must resolve to a non-empty list")
+    else . end
+  | if $source_hosts != $configured_hosts then
+      error("the runtime hosts path does not match the hosts rendered into the source Ingresses")
+    else . end
+  | if ($source_tls_secrets | length) != 1 or $source_tls_secrets[0] != $configured_tls_secret then
+      error("the runtime TLS Secret path must resolve to the single Secret rendered into the source Ingresses")
+    else . end
+  | ("{{ .Release.Namespace }}") as $release_namespace
+  | ("{{ required \"gatewayApi.listenerSet.name is required\" .Values.gatewayApi.listenerSet.name }}") as $listener_set_name
+  | ("{{ required \"gatewayApi.referenceGrant.name is required\" .Values.gatewayApi.referenceGrant.name }}") as $reference_grant_name
+  | ("{{ required \"gatewayApi.parentGateway.name is required\" .Values.gatewayApi.parentGateway.name }}") as $parent_gateway_name
+  | ("{{ required \"gatewayApi.parentGateway.namespace is required\" .Values.gatewayApi.parentGateway.namespace }}") as $parent_gateway_namespace
+  | (helm_required_value($tls_secret_path; "the Harness TLS Secret value is required")) as $tls_secret_name
+  | ($result.listenerSets[0].spec.listeners) as $source_listeners
+  | ([
+      range(0; ($source_listeners | length)) as $listener_index
+      | ($source_listeners[$listener_index]) as $listener
+      | {
+          source: $listener.name,
+          template: (
+            "\($listener.protocol | ascii_downcase)-\(([
+              $source_listeners[0:$listener_index][]
+              | select(.protocol == $listener.protocol)
+            ] | length) + 1)"
+          )
+        }
+    ]) as $listener_names
+  | def runtime_host($source_host):
+      if $source_host == null or $source_host == "*" then $source_host
+      else
+        ($source_hosts | index($source_host)) as $host_index
+        | if $host_index == null then error("cannot map generated hostname to its runtime values index")
+          else helm_required_list_item($hosts_path; "the Harness ingress hosts list is required"; $host_index)
+          end
+      end;
+  def runtime_listener_name($source_name):
+      ([$listener_names[] | select(.source == $source_name) | .template][0]
+       // error("cannot map generated ListenerSet section name"));
+  .listenerSets |= map(
+      .metadata.name = $listener_set_name
+      | .metadata.namespace = $release_namespace
+      | .spec.parentRef.name = $parent_gateway_name
+      | .spec.parentRef.namespace = $parent_gateway_namespace
+      | .spec.listeners |= map(
+          .name = runtime_listener_name(.name)
+          | if has("hostname") then .hostname = runtime_host(.hostname) else . end
+          | if .tls.certificateRefs != null then
+              .tls.certificateRefs |= map(.name = $tls_secret_name | del(.namespace))
+            else . end
+        )
+    )
+  | .referenceGrants |= map(
+      .metadata.name = $reference_grant_name
+      | .metadata.namespace = $release_namespace
+      | .spec.from |= map(.namespace = $release_namespace)
+      | .spec.to |= map(.name = $tls_secret_name)
+    )
+  | .redirects |= (
+      to_entries
+      | map(
+          .key as $redirect_index
+          | .value
+          | .metadata.name = (
+              "{{ printf \"%s-http-\($redirect_index + 1)-redirect\" (required \"gatewayApi.listenerSet.name is required\" .Values.gatewayApi.listenerSet.name) | trunc 63 | trimSuffix \"-\" }}"
+            )
+          | .metadata.namespace = $release_namespace
+          | .spec.parentRefs |= map(
+              .name = $listener_set_name
+              | .namespace = $release_namespace
+              | .sectionName = runtime_listener_name(.sectionName)
+            )
+          | if .spec.hostnames != null then .spec.hostnames |= map(runtime_host(.)) else . end
+        )
+    )
+  | .routes |= map(
+      .metadata.namespace = $release_namespace
+      | .spec.parentRefs |= map(
+          .name = $listener_set_name
+          | .namespace = $release_namespace
+          | .sectionName = runtime_listener_name(.sectionName)
+        )
+      | if .spec.hostnames != null then .spec.hostnames |= map(runtime_host(.)) else . end
+    )
+  | .filters |= map(.metadata.namespace = $release_namespace)
+  | .gatewayPatch.spec.allowedListeners.namespaces = (
+      $config.gatewayApi.parentGateway.allowedListeners.namespaces
+      // error("gatewayApi.parentGateway.allowedListeners.namespaces is required")
+    )
+  | .context.templateNamespace = $release_namespace
+  | .context.runtimeHostsPath = $hosts_path
+  | .context.runtimeTlsSecretNamePath = $tls_secret_path
+  ' "$result_json" > "$templates_json"
+
+jq --exit-status '
+  (.listenerSets + .referenceGrants + .redirects + .routes + .filters) as $resources
+  | all($resources[]; .metadata.namespace == "{{ .Release.Namespace }}")
+  and all(.routes[].spec.parentRefs[]; .namespace == "{{ .Release.Namespace }}")
+  and all(.redirects[].spec.parentRefs[]; .namespace == "{{ .Release.Namespace }}")
+  and all(.listenerSets[]; .spec.parentRef.name | contains(".Values.gatewayApi.parentGateway.name"))
+  and all(.listenerSets[]; .spec.parentRef.namespace | contains(".Values.gatewayApi.parentGateway.namespace"))
+  and all(.context.sourceHosts[]; . as $host | ($resources | tostring | contains($host) | not))
+  and all(.context.sourceTlsSecrets[]; . as $secret | ($resources | tostring | contains($secret) | not))
+' "$templates_json" >/dev/null || {
+  echo "error: generated Helm template neutrality validation failed" >&2
+  exit 1
+}
+
 write_yaml_documents() {
   local expression=$1
   local destination=$2
-  jq --compact-output "$expression" "$result_json" \
+  local source_json=${3:-$templates_json}
+  jq --compact-output "$expression" "$source_json" \
     | yq --input-format=json --output-format=yaml --prettyPrint '.[] | split_doc' > "$destination"
   if [[ ! -s "$destination" ]]; then
     printf '%s\n' '# No resources were generated.' > "$destination"
   fi
 }
 
-write_yaml_documents '.ingresses' "$output_dir/ingresses.yaml"
 write_yaml_documents '.listenerSets' "$output_dir/00-listener-set.yaml"
 write_yaml_documents '.referenceGrants' "$output_dir/10-reference-grants.yaml"
 write_yaml_documents '.redirects' "$output_dir/20-http-redirects.yaml"
 write_yaml_documents '.routes' "$output_dir/30-http-routes.yaml"
 write_yaml_documents '.filters' "$output_dir/40-http-route-filters.yaml"
-write_yaml_documents '[.gatewayPatch]' "$output_dir/gateway-allowed-listeners-patch.yaml"
-write_yaml_documents '(.listenerSets + .referenceGrants + .redirects + .routes + .filters)' "$output_dir/all.yaml"
+
+runtime_hosts_path=$(config_value '.gatewayApi.runtimeValues.hostsPath')
+runtime_hosts_arguments=$(jq --null-input --raw-output --arg path "$runtime_hosts_path" '
+  $path | split(".") | map(select(length > 0) | @json) | join(" ")
+')
+source_host_count=$(jq '.context.sourceHosts | length' "$result_json")
+{
+  # shellcheck disable=SC2016 # The dollar sign belongs to the generated Helm template.
+  printf '{{- $harnessGatewayHosts := required "the Harness ingress hosts list is required" (index .Values %s) -}}\n' "$runtime_hosts_arguments"
+  # shellcheck disable=SC2016 # The dollar sign belongs to the generated Helm template.
+  printf '{{- if ne (len $harnessGatewayHosts) %s -}}\n' "$source_host_count"
+  printf '{{- fail "Harness ingress host count changed; rerun scripts/render-gateway-api.sh" -}}\n'
+  printf '{{- end -}}\n'
+} > "$output_dir/00-runtime-values-guard.yaml"
+
+# These are generator diagnostics, not Helm templates. Keeping them outside the
+# template output makes `cp generated/*.yaml templates/` safe and unambiguous.
+write_yaml_documents '.ingresses' "$diagnostics_dir/ingresses.yaml" "$result_json"
+write_yaml_documents '[.gatewayPatch]' "$diagnostics_dir/gateway-allowed-listeners-patch.yaml"
+
+# Remove files produced by older generator revisions that would duplicate or
+# invalidate the copy-ready Helm template set.
+for stale_file in \
+  "$output_dir/all.yaml" \
+  "$output_dir/ingresses.yaml" \
+  "$output_dir/gateway-allowed-listeners-patch.yaml" \
+  "$output_dir/report.txt" \
+  "$output_dir/rendered-helm.yaml"; do
+  if [[ -f "$stale_file" ]]; then
+    rm "$stale_file"
+  fi
+done
 
 ingress_count=$(jq '.ingresses | length' "$result_json")
 rule_count=$(jq '[.routes[].spec.rules[]] | length' "$result_json")
@@ -686,12 +872,13 @@ filter_count=$(jq '.filters | length' "$result_json")
   else
     jq --raw-output '.warnings[] | "- " + .' "$result_json"
   fi
-  printf '\n%s\n' 'The Gateway patch is intentionally excluded from all.yaml; review and apply it separately.'
-} > "$output_dir/report.txt"
+  printf '\n%s\n' 'The shared Gateway allowedListeners patch is diagnostic output; review and apply it separately.'
+  printf '\n%s\n' 'Copy every YAML file from the template output directory into the umbrella chart templates directory.'
+} > "$diagnostics_dir/report.txt"
 
 if [[ "$keep_rendered" == true ]]; then
-  cp "$rendered_file" "$output_dir/rendered-helm.yaml"
+  cp "$rendered_file" "$diagnostics_dir/rendered-helm.yaml"
 fi
 
-echo "Generated manifests in $output_dir"
-echo "Review $output_dir/report.txt before applying them."
+echo "Generated reusable Helm templates in $output_dir"
+echo "Review $diagnostics_dir/report.txt before copying them into templates/."

@@ -28,11 +28,22 @@ harness:
 gatewayApi:
   enabled: true
   apiVersion: gateway.networking.k8s.io/v1
+  # Copy-ready Helm templates are generated here. Diagnostics deliberately go
+  # elsewhere so every YAML file under generated/ can be copied to templates/.
+  outputDirectory: generated
+  diagnosticsDirectory: generated-diagnostics
 
   sourceIngress:
     # Helm value to force only during the temporary source render.
     forceEnabled: true
     enabledValuePath: harness.global.ingress.enabled
+
+  # Dotted paths into the consuming umbrella chart values. Generated Helm
+  # templates read these values at install/upgrade time, so no environment
+  # hostname or TLS Secret is baked into generated YAML.
+  runtimeValues:
+    hostsPath: harness.global.ingress.hosts
+    tlsSecretNamePath: harness.global.ingress.tls.secretName
 
   # Harness 0.42.1 uses NGINX regex captures in rewrite-target annotations.
   # Envoy Gateway's HTTPRouteFilter is required to preserve those rewrites.
@@ -48,11 +59,19 @@ gatewayApi:
     # dependency that is outside the Harness Helm release namespace.
     name: shared-gateway
     namespace: gateway-system
+    # Both UT and production namespaces must carry these labels. The generated
+    # diagnostic Gateway patch uses this stable selector instead of naming one
+    # environment namespace.
+    allowedListeners:
+      namespaces:
+        from: Selector
+        selector:
+          matchLabels:
+            gateway-api.harness.io/allowed: "true"
 
   listenerSet:
-    # The name may be overridden per environment. Its namespace is deliberately
-    # not configurable: the generator always uses deployment.namespace (or the
-    # --namespace CLI override) for the ListenerSet and all Harness-side objects.
+    # The same name is safe in UT and production because the generated resource
+    # namespace is always .Release.Namespace.
     name: harness
     http:
       enabled: true
