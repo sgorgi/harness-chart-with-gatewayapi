@@ -672,16 +672,11 @@ jq \
   def path_parts($path):
     $path | split(".") | map(select(length > 0));
 
-  def helm_index_arguments($path):
-    path_parts($path) | map(@json) | join(" ");
+  def helm_tls_secret_name:
+    "{{ include \"company-harness.gatewayApi.tlsSecretName\" . }}";
 
-  def helm_required_value($path; $message):
-    ($message | @json) as $quoted_message
-    | "{{ required \($quoted_message) (index .Values \(helm_index_arguments($path))) }}";
-
-  def helm_required_list_item($path; $message; $index):
-    ($message | @json) as $quoted_message
-    | "{{ index (required \($quoted_message) (index .Values \(helm_index_arguments($path)))) \($index) }}";
+  def helm_host_item($index):
+    "{{ include \"company-harness.gatewayApi.hostAt\" (dict \"root\" $ \"index\" \($index)) }}";
 
   . as $result
   | ($values[0]) as $config
@@ -700,10 +695,7 @@ jq \
   | ("{{ required \"gatewayApi.referenceGrant.name is required\" .Values.gatewayApi.referenceGrant.name }}") as $reference_grant_name
   | ("{{ required \"gatewayApi.parentGateway.name is required\" .Values.gatewayApi.parentGateway.name }}") as $parent_gateway_name
   | ("{{ required \"gatewayApi.parentGateway.namespace is required\" .Values.gatewayApi.parentGateway.namespace }}") as $parent_gateway_namespace
-  | (helm_required_value(
-      $tls_secret_path;
-      "gatewayApi.runtimeValues.tlsSecretNamePath (\($tls_secret_path)) must resolve to the Harness TLS Secret name"
-    )) as $tls_secret_name
+  | (helm_tls_secret_name) as $tls_secret_name
   | ($result.listenerSets[0].spec.listeners) as $source_listeners
   | ([
       range(0; ($source_listeners | length)) as $listener_index
@@ -723,11 +715,7 @@ jq \
       else
         ($source_hosts | index($source_host)) as $host_index
         | if $host_index == null then error("cannot map generated hostname to its runtime values index")
-          else helm_required_list_item(
-            $hosts_path;
-            "gatewayApi.runtimeValues.hostsPath (\($hosts_path)) must resolve to the Harness ingress hosts list";
-            $host_index
-          )
+          else helm_host_item($host_index)
           end
       end;
   def runtime_listener_name($source_name):
@@ -819,17 +807,67 @@ write_yaml_documents '.redirects' "$output_dir/20-http-redirects.yaml"
 write_yaml_documents '.routes' "$output_dir/30-http-routes.yaml"
 write_yaml_documents '.filters' "$output_dir/40-http-route-filters.yaml"
 
+write_values_cursor() {
+  local dotted_path=$1
+  local error_message=$2
+  local path_segment
+  local quoted_segment
+  local path_segments=()
+
+  IFS='.' read -r -a path_segments <<< "$dotted_path"
+  # shellcheck disable=SC2016 # The dollar sign belongs to the generated Helm template.
+  printf '{{- $cursor := .Values -}}\n'
+  for path_segment in "${path_segments[@]}"; do
+    quoted_segment=$(jq --null-input --compact-output --arg value "$path_segment" '$value')
+    # shellcheck disable=SC2016 # The dollar sign belongs to the generated Helm template.
+    printf '{{- if not (kindIs "map" $cursor) -}}\n'
+    printf '{{- fail "%s" -}}\n' "$error_message"
+    printf '{{- end -}}\n'
+    # shellcheck disable=SC2016 # The dollar sign belongs to the generated Helm template.
+    printf '{{- $cursor = index $cursor %s -}}\n' "$quoted_segment"
+  done
+}
+
 runtime_hosts_path=$(config_value '.gatewayApi.runtimeValues.hostsPath')
-runtime_hosts_arguments=$(jq --null-input --raw-output --arg path "$runtime_hosts_path" '
-  $path | split(".") | map(select(length > 0) | @json) | join(" ")
-')
+runtime_tls_secret_path=$(config_value '.gatewayApi.runtimeValues.tlsSecretNamePath')
 source_host_count=$(jq '.context.sourceHosts | length' "$result_json")
 {
+  printf '{{- define "company-harness.gatewayApi.hostsJson" -}}\n'
+  write_values_cursor \
+    "$runtime_hosts_path" \
+    "gatewayApi.runtimeValues.hostsPath ($runtime_hosts_path) does not exist in this Helm values scope"
   # shellcheck disable=SC2016 # The dollar sign belongs to the generated Helm template.
-  printf '{{- $harnessGatewayHosts := required "gatewayApi.runtimeValues.hostsPath (%s) must resolve to the Harness ingress hosts list" (index .Values %s) -}}\n' "$runtime_hosts_path" "$runtime_hosts_arguments"
+  printf '{{- if not (kindIs "slice" $cursor) -}}\n'
+  printf '{{- fail "gatewayApi.runtimeValues.hostsPath (%s) must resolve to a list" -}}\n' "$runtime_hosts_path"
+  # shellcheck disable=SC2016 # The dollar sign belongs to the generated Helm template.
+  printf '{{- end -}}\n{{- toJson $cursor -}}\n{{- end -}}\n'
+
+  printf '{{- define "company-harness.gatewayApi.hostAt" -}}\n'
+  # shellcheck disable=SC2016 # The dollar signs belong to the generated Helm template.
+  printf '{{- $hostIndex := int .index -}}\n{{- $hosts := include "company-harness.gatewayApi.hostsJson" .root | fromJsonArray -}}\n'
+  # shellcheck disable=SC2016 # The dollar signs belong to the generated Helm template.
+  printf '{{- if ge $hostIndex (len $hosts) -}}\n'
+  # shellcheck disable=SC2016 # The dollar signs belong to the generated Helm template.
+  printf '{{- fail (printf "gatewayApi.runtimeValues.hostsPath (%s) contains %%d host(s), but the generated templates require host index %%d; rerun the generator with matching values" (len $hosts) $hostIndex) -}}\n' "$runtime_hosts_path"
+  # shellcheck disable=SC2016 # The dollar signs belong to the generated Helm template.
+  printf '{{- end -}}\n{{- index $hosts $hostIndex -}}\n{{- end -}}\n'
+
+  printf '{{- define "company-harness.gatewayApi.tlsSecretName" -}}\n'
+  write_values_cursor \
+    "$runtime_tls_secret_path" \
+    "gatewayApi.runtimeValues.tlsSecretNamePath ($runtime_tls_secret_path) does not exist in this Helm values scope"
+  # shellcheck disable=SC2016 # The dollar sign belongs to the generated Helm template.
+  printf '{{- if empty $cursor -}}\n'
+  printf '{{- fail "gatewayApi.runtimeValues.tlsSecretNamePath (%s) must resolve to the Harness TLS Secret name" -}}\n' "$runtime_tls_secret_path"
+  # shellcheck disable=SC2016 # The dollar sign belongs to the generated Helm template.
+  printf '{{- end -}}\n{{- $cursor -}}\n{{- end -}}\n'
+
+  # shellcheck disable=SC2016 # The dollar sign belongs to the generated Helm template.
+  printf '{{- $harnessGatewayHosts := include "company-harness.gatewayApi.hostsJson" . | fromJsonArray -}}\n'
   # shellcheck disable=SC2016 # The dollar sign belongs to the generated Helm template.
   printf '{{- if ne (len $harnessGatewayHosts) %s -}}\n' "$source_host_count"
-  printf '{{- fail "Harness ingress host count changed; rerun scripts/render-gateway-api.sh" -}}\n'
+  # shellcheck disable=SC2016 # The dollar sign belongs to the generated Helm template.
+  printf '{{- fail (printf "gatewayApi.runtimeValues.hostsPath (%s) contains %%d host(s), but the generated templates require %s; rerun scripts/render-gateway-api.sh" (len $harnessGatewayHosts)) -}}\n' "$runtime_hosts_path" "$source_host_count"
   printf '{{- end -}}\n'
 } > "$output_dir/00-runtime-values-guard.yaml"
 

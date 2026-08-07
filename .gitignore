@@ -29,3 +29,5 @@
 
 # A generated routing inventory contains environment-specific infrastructure names.
 /generated/
+
+charts/*
